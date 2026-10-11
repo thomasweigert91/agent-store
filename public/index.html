@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agent Store</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏢</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="hud">
+    <div class="logo" title="Agent Store">
+      <span class="logo-icon">🏢</span>
+      <span class="logo-text">AGENT<b>STORE</b></span>
+    </div>
+
+    <div class="stats">
+      <div class="stat coins" title="Münzen – verdienst du mit erledigten Aufträgen"><span>🪙</span><b id="stat-coins">0</b></div>
+      <div class="stat" title="Agents im Team"><span>👥</span><b id="stat-agents">0/10</b></div>
+      <div class="stat working" title="Agents, die gerade arbeiten"><span>⚡</span><b id="stat-working">0</b></div>
+      <div class="stat" title="Erledigte Aufträge insgesamt"><span>🏆</span><b id="stat-quests">0</b></div>
+    </div>
+
+    <div class="energy" id="energy" hidden title="Auslastung deines Claude-Abos (wird nach jedem Claude-Auftrag aktualisiert)">
+      <span class="energy-label">Claude-Abo</span>
+      <div class="energy-bars" id="energy-bars"></div>
+    </div>
+
+    <div class="providers" id="providers"></div>
+
+    <nav class="actions">
+      <button class="btn btn-gold" id="btn-store">🛒 Store</button>
+      <button class="btn" id="btn-broadcast">📢 Massenauftrag</button>
+      <button class="btn btn-icon" id="btn-settings" title="Einstellungen">⚙️</button>
+    </nav>
+  </header>
+
+  <main>
+    <div class="welcome" id="welcome" hidden>
+      <div class="welcome-emoji">👋</div>
+      <div>
+        <h2>Willkommen im Hauptquartier, Chef!</h2>
+        <p>Rekrutiere im <b>🛒 Store</b> deine ersten Agents – der <b>Allrounder</b> ist gratis. Gib ihnen Aufträge direkt am Schreibtisch, verdiene Münzen und baue dein Team auf bis zu 10 Agents aus.</p>
+      </div>
+      <button class="btn btn-gold" id="welcome-store">Zum Store</button>
+    </div>
+    <section class="floor" id="floor" aria-label="Schreibtische deiner Agents"></section>
+  </main>
+
+  <footer class="ticker" id="ticker"><span class="ticker-dot"></span><span id="ticker-text">Bereit.</span></footer>
+
+  <aside class="drawer" id="drawer" aria-hidden="true">
+    <div class="drawer-inner" id="drawer-inner"></div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
+
+  <div class="modal" id="modal" aria-hidden="true">
+    <div class="modal-card" id="modal-card"></div>
+  </div>
+
+  <div class="toasts" id="toasts"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
