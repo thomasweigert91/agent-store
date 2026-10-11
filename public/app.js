@@ -213,6 +213,7 @@ function buildDesk(a) {
       <span class="slot-no"></span>
       <span class="chip prov"></span>
       <span class="chip autonomy" hidden></span>
+      <span class="chip relay" hidden></span>
       <span class="badge-unread" hidden>!</span>
     </div>
     <div class="desk-body">
@@ -240,6 +241,7 @@ function buildDesk(a) {
     slotNo: $('.slot-no', el),
     prov: $('.chip.prov', el),
     autonomy: $('.chip.autonomy', el),
+    relay: $('.chip.relay', el),
     unread: $('.badge-unread', el),
     emoji: $('.emoji', el),
     lvl: $('.lvl', el),
@@ -289,6 +291,10 @@ function updateDesk(a) {
   const au = AUTONOMY[a.autonomy]?.short;
   r.autonomy.hidden = !au || !a.provider.endsWith('-cli');
   r.autonomy.textContent = au || '';
+  const relayTo = a.relay?.toAgentId ? S.agents.get(a.relay.toAgentId) : null;
+  r.relay.hidden = !relayTo;
+  r.relay.textContent = relayTo ? `🔗 → ${relayTo.name}` : '';
+  r.relay.title = relayTo ? `Ergebnisse gehen automatisch an ${relayTo.name}${a.relay.instruction ? ': ' + a.relay.instruction : ''}` : '';
   r.unread.hidden = !(a.unread > 0) || a.running;
   r.unread.textContent = a.unread > 1 ? a.unread : '!';
   r.emoji.textContent = a.avatar;
@@ -422,6 +428,18 @@ function renderDrawer() {
 }
 
 function messageHtml(m) {
+  if (m.role === 'user' && m.meta?.from) {
+    const f = m.meta.from;
+    const start = Number(m.meta.resultStart) || 0;
+    const result = start ? m.text.slice(start) : m.text;
+    const chain = m.meta.step > 1 ? ` · 🔗 Kettenschritt ${m.meta.step}` : '';
+    return `<div class="msg user handoff">
+      <div class="handoff-from">📨 von ${esc(f.title)} ${esc(f.avatar)} ${esc(f.name)}${chain}</div>
+      <div class="bubble">${esc(m.meta.instruction || '')}
+        <details><summary>Ergebnis von ${esc(f.name)} anzeigen</summary><div class="handoff-result">${renderMarkdown(result)}</div></details>
+      </div>
+      <div class="meta">${fmtTime(m.ts)}</div></div>`;
+  }
   if (m.role === 'user') {
     return `<div class="msg user"><div class="bubble">${esc(m.text)}</div><div class="meta">${fmtTime(m.ts)}</div></div>`;
   }
@@ -432,7 +450,7 @@ function messageHtml(m) {
     if (meta.tools) bits.push(`🔧 ${meta.tools}`);
     if (meta.model) bits.push(esc(meta.model));
     const reward = meta.coins ? `<span class="reward">+${meta.coins} 🪙 +${meta.xp} XP</span>` : '';
-    return `<div class="msg assistant" data-mid="${esc(m.id)}"><div class="bubble">${renderMarkdown(m.text)}</div><div class="meta">${bits.join(' · ')} ${reward}<button class="copy-msg" data-copy-mid="${esc(m.id)}">📋 kopieren</button></div></div>`;
+    return `<div class="msg assistant" data-mid="${esc(m.id)}"><div class="bubble">${renderMarkdown(m.text)}</div><div class="meta">${bits.join(' · ')} ${reward}<button class="copy-msg" data-copy-mid="${esc(m.id)}">📋 kopieren</button><button class="copy-msg handoff-btn" data-handoff-mid="${esc(m.id)}">➡️ Weitergeben an …</button></div></div>`;
   }
   if (m.role === 'error') return `<div class="msg error"><div class="bubble">❌ ${esc(m.text)}</div><div class="meta">${fmtTime(m.ts)}</div></div>`;
   return `<div class="msg system"><div class="bubble">${esc(m.text)}</div></div>`;
@@ -552,6 +570,17 @@ function renderGear() {
         <input name="workdir" value="${esc(a.workdir)}" placeholder="${esc(a.cwd)}">
         <div class="help">Leer = eigener Ordner im Projekt. Du kannst z. B. <code>D:\\mein-projekt</code> eintragen, damit ein Coder direkt dort arbeitet.</div>
       </div>
+      <div class="row2">
+        <div class="field">
+          <label>🔗 Ergebnis automatisch weitergeben an</label>
+          <select name="relayTo"><option value="">— niemanden —</option>${[...S.agents.values()].filter((x) => x.id !== a.id).sort((x, y) => x.slot - y.slot).map((x) => `<option value="${esc(x.id)}" ${a.relay?.toAgentId === x.id ? 'selected' : ''}>${esc(x.avatar)} ${esc(x.name)} (${esc(x.archetypeTitle)})</option>`).join('')}</select>
+          <div class="help">Nach jedem erfolgreichen Auftrag geht das Ergebnis automatisch an diesen Agent. So baust du Ketten wie Forscher → Texter → Kritiker (max. 6 Übergaben pro Kette).</div>
+        </div>
+        <div class="field">
+          <label>Anweisung für die Weitergabe</label>
+          <input name="relayInstruction" value="${esc(a.relay?.instruction || '')}" placeholder="z. B. Schreib daraus einen Blogpost.">
+        </div>
+      </div>
       <div class="field">
         <label>Persönlichkeit & Anweisungen (System-Prompt)</label>
         <textarea name="persona" rows="7">${esc(a.persona)}</textarea>
@@ -590,6 +619,7 @@ function renderGear() {
         autonomy: f.get('autonomy'),
         workdir: f.get('workdir'),
         persona: f.get('persona'),
+        relay: f.get('relayTo') ? { toAgentId: f.get('relayTo'), instruction: f.get('relayInstruction') } : null,
       });
       toast('💾 Gespeichert');
       renderDrawer();
@@ -610,6 +640,8 @@ $('#drawer').addEventListener('click', async (e) => {
     setTimeout(() => (codeBtn.textContent = 'kopieren'), 1200);
     return;
   }
+  const handoffBtn = e.target.closest('[data-handoff-mid]');
+  if (handoffBtn) return openHandoff(S.openId, handoffBtn.dataset.handoffMid);
   const msgBtn = e.target.closest('[data-copy-mid]');
   if (msgBtn) {
     const m = S.detail?.messages?.find((x) => x.id === msgBtn.dataset.copyMid);
@@ -620,6 +652,32 @@ $('#drawer').addEventListener('click', async (e) => {
     }
   }
 });
+
+// ---------------------------------------------------------------- Übergabe an anderen Agent
+function openHandoff(fromId, messageId) {
+  const from = S.agents.get(fromId);
+  const targets = [...S.agents.values()].filter((a) => a.id !== fromId).sort((x, y) => x.slot - y.slot);
+  if (!from) return;
+  if (!targets.length) return toast('Rekrutiere zuerst einen zweiten Agent, um Ergebnisse weiterzugeben.');
+  openModal(`
+    <div class="modal-head"><h2>➡️ Ergebnis von ${esc(from.avatar)} ${esc(from.name)} weitergeben</h2><button class="btn btn-ghost btn-icon" data-close>✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label>An wen?</label></div>
+      <div class="bc-list">${targets.map((a, i) => `<label class="bc-item"><input type="radio" name="handoff-to" value="${esc(a.id)}" ${i === 0 ? 'checked' : ''}><span>${esc(a.avatar)}</span><span><div class="n">${esc(a.name)}</div><div class="s">${esc(a.archetypeTitle)} · ${esc(providerShort(a))}${a.running ? ' · arbeitet' : ''}</div></span></label>`).join('')}</div>
+      <div class="field"><label>Anweisung (optional)</label><textarea id="handoff-text" rows="4" placeholder="z. B. Mach aus dieser Recherche einen lockeren Blogpost."></textarea>
+        <div class="help">Der Ziel-Agent bekommt deine Anweisung plus das komplette Ergebnis. +5 🪙 Übergabe-Bonus.</div></div>
+    </div>
+    <div class="modal-foot"><button class="btn" data-close>Abbrechen</button><button class="btn btn-gold" id="handoff-send">➡️ Übergeben</button></div>`, { narrow: true });
+  $('#handoff-text').focus();
+  $('#handoff-send').onclick = async () => {
+    const to = $('#modal-card').querySelector('input[name="handoff-to"]:checked')?.value;
+    if (!to) return toast('Bitte einen Ziel-Agent wählen.');
+    try {
+      await api('POST', `/api/agents/${fromId}/handoff`, { toAgentId: to, messageId, instruction: $('#handoff-text').value });
+      closeModal();
+    } catch (err) { toast(err.message, 'error'); }
+  };
+}
 
 // ---------------------------------------------------------------- Modals
 function openModal(html, { narrow = false } = {}) {
@@ -850,6 +908,13 @@ function connect() {
     if (S.openId === id && $('#live-activity')) $('#live-activity').textContent = text;
   });
   on('game', (g) => { S.game = g; renderStats(); });
+  on('handoff', (h) => {
+    ticker(`${h.fromAvatar} ${h.fromName} → ${h.toAvatar} ${h.toName} übergeben${h.auto ? ` (Kette, Schritt ${h.step})` : ''} · +${h.bonus} 🪙`);
+    toast(`📨 ${h.fromName} → ${h.toName} übergeben (+${h.bonus} 🪙)`);
+    const to = S.agents.get(h.toId);
+    const r = to && desks[to.slot]?.refs;
+    if (r) { r.el.classList.remove('flash'); void r.el.offsetWidth; r.el.classList.add('flash'); }
+  });
   on('questDone', (q) => {
     const a = S.agents.get(q.id);
     if (a) popCoins(a, q.coins, q.xp);

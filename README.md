@@ -52,6 +52,20 @@ In der App zeigen die Pillen oben rechts, welche Antriebe bereit sind (● grün
 **Tastatur:** `1`…`0` öffnet den jeweiligen Schreibtisch · `s` Store · `m` Massenauftrag · `Esc` schließen ·
 `Strg+Enter` sendet in der Detailansicht.
 
+### 🔗 Übergaben & Ketten
+
+Agents können ihre Ergebnisse an andere Agents weitergeben:
+
+- **Von Hand:** Unter jeder Antwort steht **➡️ Weitergeben an …**. Ziel-Agent wählen, optional eine Anweisung
+  dazuschreiben („Mach daraus einen Blogpost“). Der Ziel-Agent bekommt Anweisung und komplettes Ergebnis als neuen
+  Auftrag; im Chat erscheint er als „📨 von Forscher Nova“.
+- **Automatisch (Kette):** In der **⚙️ Ausrüstung** unter „🔗 Ergebnis automatisch weitergeben an“ einen Ziel-Agent und
+  eine Standardanweisung setzen. Nach jedem *erfolgreichen* Auftrag geht das Ergebnis selbstständig weiter, z. B.
+  Forscher → Texter → Kritiker. Auf dem Schreibtisch zeigt „🔗 → Name“ die Verbindung, der Ticker meldet jede Übergabe.
+- **Schutz:** Bei Fehler oder Abbruch wird nicht weitergegeben. Eine Kette stoppt nach **6 Übergaben**, auch wenn sie
+  im Kreis läuft. Wird ein Ziel-Agent entlassen, wird die Verbindung automatisch entfernt.
+- **Bonus:** +5 🪙 pro Übergabe.
+
 ### Autonomie-Stufen (nur Abo-/CLI-Agents)
 
 | Stufe | Claude Code | Antigravity (`agy`) |
@@ -114,10 +128,11 @@ API-Keys liegen nur lokal in `data/settings.json` bzw. `.env`.
 | GET | `/api/state` | Gesamter Zustand (Agents, Münzen, Katalog, Antriebe) |
 | GET | `/api/events` | SSE-Stream: `agent`, `delta`, `activity`, `questDone`, `game`, `limits`, … |
 | POST | `/api/agents` | Rekrutieren `{archetypeId, provider?, model?, slot?}` |
-| PATCH/DELETE | `/api/agents/:id` | Ausrüstung ändern / entlassen |
+| PATCH/DELETE | `/api/agents/:id` | Ausrüstung ändern (inkl. `relay: {toAgentId, instruction}`) / entlassen |
 | POST | `/api/agents/:id/tasks` | Auftrag `{prompt}` |
 | POST | `/api/agents/:id/stop` · `/reset` · `/ack` · `/open-folder` | Steuerung |
 | POST | `/api/broadcast` | Massenauftrag `{agentIds, prompt}` |
+| POST | `/api/agents/:id/handoff` | Antwort weitergeben `{toAgentId, messageId?, instruction?}` |
 | PUT | `/api/settings` | Keys, Parallelität, Sound |
 
 Schreibende Anfragen brauchen den Header `X-Agent-Store: 1`.
@@ -138,5 +153,5 @@ Schreibende Anfragen brauchen den Header `X-Agent-Store: 1`.
 
 ## 🗺️ Ideen für später
 
-Agent-zu-Agent-Übergaben (Kritiker prüft automatisch das Ergebnis des Texters), Quest-Vorlagen, Achievements,
+Rückkopplung in Ketten (Kritiker schickt mit Verbesserungen zurück an den Texter), Quest-Vorlagen, Achievements,
 geplante Aufträge (z. B. jeden Morgen), Export der Ergebnisse als Markdown.

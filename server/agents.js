@@ -11,6 +11,9 @@ export const MAX_AGENTS = 10;
 const MAX_MESSAGES = 300;
 const PREVIEW_CHARS = 4000;
 const AUTONOMY = ['safe', 'edits', 'auto', 'full'];
+const MAX_CHAIN_STEPS = 6;   // max. Übergaben pro Kette (Schutz gegen Endlosschleifen)
+const HANDOFF_BONUS = 5;     // Bonus-Münzen pro erfolgreicher Übergabe
+const DEFAULT_HANDOFF_INSTRUCTION = 'Arbeite mit dem folgenden Ergebnis weiter.';
 
 const running = new Map(); // agentId -> AbortController
 const live = new Map();    // agentId -> { activity, partial, startedAt, prompt, tools }
@@ -165,6 +168,14 @@ export function updateAgent(id, patch) {
     if (wd !== agent.workdir) agent.sessionId = null; // Claude-Sessions hängen am Ordner
     agent.workdir = wd;
   }
+  if (patch.relay === null || (patch.relay && !patch.relay.toAgentId)) {
+    agent.relay = null;
+  } else if (patch.relay && typeof patch.relay === 'object') {
+    const target = findAgent(patch.relay.toAgentId);
+    if (!target) throw fail(400, 'Ziel-Agent für die Weitergabe existiert nicht.');
+    if (target.id === agent.id) throw fail(400, 'Ein Agent kann nicht an sich selbst weitergeben.');
+    agent.relay = { toAgentId: target.id, instruction: String(patch.relay.instruction || '').trim().slice(0, 2000) };
+  }
   if (Number.isInteger(patch.slot) && patch.slot >= 0 && patch.slot < MAX_AGENTS && patch.slot !== agent.slot) {
     const other = state.agents.find((a) => a.slot === patch.slot);
     if (other) { other.slot = agent.slot; pushUpdate(other); }
@@ -183,6 +194,14 @@ export function dismiss(id) {
   state.coins += refund;
   state.agents = state.agents.filter((a) => a.id !== id);
   live.delete(id);
+  // Ketten, die auf den entlassenen Agent zeigen, auflösen.
+  for (const other of state.agents) {
+    if (other.relay?.toAgentId === id) {
+      other.relay = null;
+      addMessage(other, { role: 'system', text: `🔗 Automatische Weitergabe an ${agent.name} entfernt (entlassen).` });
+      pushUpdate(other);
+    }
+  }
   saveState();
   emit('agentRemoved', { id });
   pushGame();
@@ -200,6 +219,52 @@ export function enqueue(id, prompt) {
   pushUpdate(agent);
   pump();
   return agent;
+}
+
+/**
+ * Übergibt eine Antwort von Agent `fromId` als neuen Auftrag an einen anderen Agent.
+ * chainId/step werden bei automatischen Ketten mitgeführt.
+ */
+export function handoff(fromId, { toAgentId, messageId, instruction, chainId, step = 1 } = {}) {
+  const from = findAgent(fromId);
+  if (!from) throw fail(404, 'Agent nicht gefunden.');
+  const to = findAgent(toAgentId);
+  if (!to) throw fail(400, 'Ziel-Agent nicht gefunden.');
+  if (to.id === from.id) throw fail(400, 'Ein Agent kann nicht an sich selbst übergeben.');
+  const answers = from.messages.filter((m) => m.role === 'assistant');
+  const msg = messageId ? answers.find((m) => m.id === messageId) : answers[answers.length - 1];
+  if (!msg) throw fail(400, 'Keine Antwort zum Weitergeben gefunden.');
+
+  const instr = String(instruction || '').trim().slice(0, 2000) || DEFAULT_HANDOFF_INSTRUCTION;
+  const header = `${instr}
+
+Ergebnis von ${from.name} (${from.archetypeTitle}):
+
+`;
+  const prompt = header + msg.text.slice(0, 100000 - header.length);
+  to.queue.push({
+    id: uid(),
+    prompt,
+    ts: Date.now(),
+    from: { agentId: from.id, name: from.name, title: from.archetypeTitle, avatar: from.avatar },
+    instruction: instr,
+    resultStart: header.length,
+    chainId: chainId || uid(),
+    step,
+  });
+  state.coins += HANDOFF_BONUS;
+  state.totalCoinsEarned += HANDOFF_BONUS;
+  saveState();
+  pushUpdate(to);
+  pushGame();
+  emit('handoff', {
+    fromId: from.id, toId: to.id,
+    fromName: from.name, toName: to.name,
+    fromAvatar: from.avatar, toAvatar: to.avatar,
+    step, bonus: HANDOFF_BONUS, auto: Boolean(chainId),
+  });
+  pump();
+  return to;
 }
 
 export function removeQueued(id, taskId) {
@@ -273,7 +338,11 @@ async function execute(agent) {
   live.set(agent.id, l);
 
   const history = agent.messages.slice();
-  addMessage(agent, { role: 'user', text: task.prompt });
+  addMessage(agent, {
+    role: 'user',
+    text: task.prompt,
+    ...(task.from ? { meta: { from: task.from, instruction: task.instruction, resultStart: task.resultStart, chainId: task.chainId, step: task.step } } : {}),
+  });
   agent.status = 'working';
   saveState();
   pushUpdate(agent);
@@ -320,6 +389,7 @@ async function execute(agent) {
     agent.status = 'done';
     agent.unread += 1;
     emit('questDone', { id: agent.id, name: agent.name, avatar: agent.avatar, coins: r.coins, xp: r.xp, levelUp: r.levelUp, levelTitle: r.levelUp ? levelTitle(r.levelUp) : null });
+    relayResult(agent, task);
   } catch (err) {
     if (err.aborted || ac.signal.aborted) {
       addMessage(agent, { role: 'system', text: '⏹️ Auftrag abgebrochen.', meta: { partial: l.partial.slice(-PREVIEW_CHARS) } });
@@ -340,6 +410,23 @@ async function execute(agent) {
     }
     pushGame();
     pump();
+  }
+}
+
+// Automatische Weitergabe nach erfolgreichem Auftrag (nur bei Erfolg, nie bei Fehler/Abbruch).
+function relayResult(agent, task) {
+  const relay = agent.relay;
+  if (!relay?.toAgentId) return;
+  if (!findAgent(relay.toAgentId)) { agent.relay = null; return; }
+  const step = (task.step || 0) + 1;
+  if (step > MAX_CHAIN_STEPS) {
+    addMessage(agent, { role: 'system', text: `🔗 Kette nach ${MAX_CHAIN_STEPS} Übergaben gestoppt (Schutz gegen Endlosschleifen).` });
+    return;
+  }
+  try {
+    handoff(agent.id, { toAgentId: relay.toAgentId, instruction: relay.instruction, chainId: task.chainId || uid(), step });
+  } catch (err) {
+    addMessage(agent, { role: 'error', text: 'Automatische Weitergabe fehlgeschlagen: ' + err.message });
   }
 }
 

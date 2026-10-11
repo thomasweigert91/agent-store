@@ -116,6 +116,11 @@ route('POST', '/api/agents', (_, body) => agents.publicAgent(agents.recruit(body
 route('PATCH', '/api/agents/:id', ({ id }, body) => agents.publicAgent(agents.updateAgent(id, body)));
 route('DELETE', '/api/agents/:id', ({ id }) => { agents.dismiss(id); return { ok: true }; });
 route('POST', '/api/agents/:id/tasks', ({ id }, body) => agents.publicAgent(agents.enqueue(id, body.prompt)));
+route('POST', '/api/agents/:id/handoff', ({ id }, body) => agents.publicAgent(agents.handoff(id, {
+  toAgentId: body.toAgentId,
+  messageId: body.messageId,
+  instruction: body.instruction,
+})));
 route('DELETE', '/api/agents/:id/tasks/:taskId', ({ id, taskId }) => { agents.removeQueued(id, taskId); return { ok: true }; });
 route('POST', '/api/agents/:id/stop', ({ id }) => { agents.stop(id); return { ok: true }; });
 route('POST', '/api/agents/:id/reset', ({ id }) => { agents.resetConversation(id); return { ok: true }; });
