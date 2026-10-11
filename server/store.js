@@ -17,7 +17,21 @@ try { process.loadEnvFile(path.join(ROOT, '.env')); } catch { /* keine .env vorh
 export const START_COINS = 500;
 
 function defaultState() {
-  return { version: 1, coins: START_COINS, totalQuests: 0, totalCoinsEarned: 0, agents: [], createdAt: Date.now() };
+  return {
+    version: 1, coins: START_COINS, totalQuests: 0, totalCoinsEarned: 0, agents: [], createdAt: Date.now(),
+    projects: [], activeProjectId: null, templates: [], schedules: [], upgrades: [], achievements: {}, stats: {},
+  };
+}
+
+// Ältere Spielstände um neue Felder ergänzen.
+function normalizeState(s) {
+  const d = defaultState();
+  for (const key of ['projects', 'templates', 'schedules', 'upgrades', 'achievements', 'stats']) {
+    if (!s[key] || typeof s[key] !== 'object') s[key] = d[key];
+  }
+  if (s.activeProjectId === undefined) s.activeProjectId = null;
+  if (s.stats.quests === undefined) s.stats.quests = s.totalQuests || 0; // Erfolge rückwirkend zählen
+  return s;
 }
 
 function defaultSettings() {
@@ -44,7 +58,7 @@ function writeJsonAtomic(file, data) {
   fs.renameSync(tmp, file);
 }
 
-export const state = readJson(STATE_FILE, defaultState());
+export const state = normalizeState(readJson(STATE_FILE, defaultState()));
 export const settings = readJson(SETTINGS_FILE, defaultSettings());
 
 let saveTimer = null;

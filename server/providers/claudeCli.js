@@ -28,9 +28,10 @@ function describeTool(name, input) {
   return `🔧 ${name}${detail ? ': ' + String(detail).slice(0, 80) : ''}`;
 }
 
-export async function run({ agent, prompt, persona, cwd, signal, onEvent }) {
+export async function run({ agent, prompt, persona, cwd, signal, onEvent, extraDirs = [] }) {
   const attempt = async (sessionId) => {
     const args = ['-p', '--output-format', 'stream-json', '--verbose', '--include-partial-messages'];
+    for (const dir of extraDirs) args.push('--add-dir', dir);
     if (agent.model) args.push('--model', agent.model);
     if (sessionId) args.push('--resume', sessionId);
     const mode = PERMISSION_MODES[agent.autonomy];

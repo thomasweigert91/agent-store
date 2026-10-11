@@ -21,8 +21,13 @@
       <div class="stat coins" title="Münzen – verdienst du mit erledigten Aufträgen"><span>🪙</span><b id="stat-coins">0</b></div>
       <div class="stat" title="Agents im Team"><span>👥</span><b id="stat-agents">0/10</b></div>
       <div class="stat working" title="Agents, die gerade arbeiten"><span>⚡</span><b id="stat-working">0</b></div>
-      <div class="stat" title="Erledigte Aufträge insgesamt"><span>🏆</span><b id="stat-quests">0</b></div>
+      <div class="stat" title="Erledigte Aufträge insgesamt"><span>✔</span><b id="stat-quests">0</b></div>
+      <div class="stat morale" title="Team-Moral – jedes Büro-Upgrade gibt +3 % Münzen"><span>😊</span><b id="stat-morale">100%</b></div>
     </div>
+
+    <label class="project-picker" title="Aktives Projekt – neue Aufträge werden ihm zugeordnet">
+      <span>📁</span><select id="active-project"><option value="">Kein Projekt</option></select>
+    </label>
 
     <div class="energy" id="energy" hidden title="Auslastung deines Claude-Abos (wird nach jedem Claude-Auftrag aktualisiert)">
       <span class="energy-label">Claude-Abo</span>
@@ -33,7 +38,12 @@
 
     <nav class="actions">
       <button class="btn btn-gold" id="btn-store">🛒 Store</button>
-      <button class="btn" id="btn-broadcast">📢 Massenauftrag</button>
+      <button class="btn" id="btn-quests" title="Quest-Board: Auftragsvorlagen (Taste Q)">📜 Quests</button>
+      <button class="btn" id="btn-broadcast" title="Massenauftrag / Duell (Taste M)">📢 Massenauftrag</button>
+      <button class="btn" id="btn-schedule" title="Schichtplan: geplante Aufträge">🗓️ Schichten</button>
+      <button class="btn" id="btn-projects" title="Projekte & Ergebnis-Archiv (Taste P)">📁 Projekte</button>
+      <button class="btn btn-icon" id="btn-achievements" title="Erfolge">🏆</button>
+      <button class="btn btn-icon" id="btn-stats" title="Statistik">📊</button>
       <button class="btn btn-icon" id="btn-settings" title="Einstellungen">⚙️</button>
     </nav>
   </header>

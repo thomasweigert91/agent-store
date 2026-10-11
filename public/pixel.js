@@ -67,10 +67,11 @@ export function randomLook() {
 const IDLE = [['doze', 3, 9, 15], ['coffee', 2, 6, 9], ['read', 2, 7, 11], ['stretch', 1, 3, 4], ['look', 2, 4, 7]];
 const idleState = new Map();
 
-function idleMode(id, now) {
+function idleMode(id, now, upgrades = []) {
   let s = idleState.get(id);
   if (!s || now >= s.until) {
-    const options = IDLE.filter(([m]) => m !== s?.mode);
+    const options = IDLE.filter(([m]) => m !== s?.mode)
+      .map((o) => (o[0] === 'coffee' && upgrades.includes('coffee') ? [o[0], 5, o[2], o[3]] : o));
     let r = Math.random() * options.reduce((n, o) => n + o[1], 0);
     let pick = options[0];
     for (const o of options) { if ((r -= o[1]) < 0) { pick = o; break; } }
@@ -85,11 +86,14 @@ const PHASE_MODE = { working: 'type', thinking: 'think', feedback: 'wave', error
 function modeFor(input, now) {
   if (input.mode) return { mode: input.mode, since: 0 };
   const m = PHASE_MODE[input.phase];
-  return m ? { mode: m, since: 0 } : idleMode(input.id, now);
+  return m ? { mode: m, since: 0 } : idleMode(input.id, now, input.upgrades);
 }
 
 // ---------------------------------------------------------------- Kulisse
-function background(t, now) {
+const isNight = (now) => { const h = new Date(now || Date.now()).getHours(); return h >= 20 || h < 7; };
+
+function background(t, now, up = [], nextShift = null) {
+  const night = isNight(now);
   R(0, 0, W, 42, C.wall);
   for (let x = 6; x < W; x += 12) R(x, 0, 1, 32, C.wallLine);
   R(0, 32, W, 1, C.wallLine);
@@ -99,16 +103,57 @@ function background(t, now) {
   R(0, 46, W, 1, C.floorLine);
   for (const [x, y] of [[9, 42], [27, 43], [48, 42], [66, 43], [17, 45], [40, 45], [58, 45], [74, 46]]) P(x, y, C.floorLine);
 
-  // Fenster mit funkelnden Sternen
+  if (up.includes('rug')) { // Teppich
+    R(12, 43, 52, 3, '#6b2d4f');
+    R(12, 43, 52, 1, '#8a3c66');
+    for (let x = 14; x < 62; x += 4) P(x, 44, '#c46a8f');
+  }
+
+  // Fenster: tagsüber Himmel mit Sonne und Wolke, nachts Sterne und Mond
   R(3, 3, 14, 11, C.window);
-  R(4, 4, 12, 9, C.sky);
-  [[5, 5], [7, 10], [14, 11], [6, 7], [15, 6], [11, 11]].forEach(([x, y], i) => {
-    P(x, y, noise(i * 31 + (t >> 2)) > 0.35 ? '#e8ecff' : '#4a5590');
-  });
-  R(12, 5, 2, 2, '#f3e3a2');
+  if (night) {
+    R(4, 4, 12, 9, C.sky);
+    [[5, 5], [7, 10], [14, 11], [6, 7], [15, 6], [11, 11]].forEach(([x, y], i) => {
+      P(x, y, noise(i * 31 + (t >> 2)) > 0.35 ? '#e8ecff' : '#4a5590');
+    });
+    R(12, 5, 2, 2, '#f3e3a2');
+  } else {
+    R(4, 4, 12, 9, '#8fd0ff');
+    R(4, 10, 12, 3, '#b5e2ff');
+    R(12, 5, 3, 3, '#ffd75e');
+    P(11, 6, '#ffe9a3');
+    const cx = 4 + ((t >> 4) % 12);
+    R(cx, 7, 3, 1, '#ffffff');
+    R(cx + 1, 6, 2, 1, '#ffffff');
+  }
   R(9, 4, 1, 9, C.window);
   R(4, 8, 12, 1, C.window);
   R(2, 14, 16, 1, '#4a5590');
+  if (up.includes('plants')) { // Kaktus auf der Fensterbank + Hängepflanze
+    R(14, 11, 2, 3, '#3cc46d'); P(13, 12, '#3cc46d'); R(13, 13, 4, 1, '#b5651d');
+    R(19, 0, 1, 3, '#59607f'); R(18, 3, 3, 2, '#b5651d');
+    const s2 = (t >> 3) % 2;
+    P(17, 5 + s2, '#3cc46d'); P(17, 6, '#2f9e57'); P(21, 5, '#3cc46d'); P(21 - s2, 6, '#2f9e57'); P(19, 5, '#3cc46d'); P(19, 6 + s2, '#3cc46d');
+  }
+  if (up.includes('poster')) { // Poster mit Bergmotiv
+    R(38, 2, 9, 7, '#e6e8f4');
+    R(39, 3, 7, 5, '#2b3a78');
+    P(43, 4, '#ffd75e');
+    R(40, 6, 2, 1, '#6ee7b7'); R(41, 5, 1, 1, '#6ee7b7'); R(42, 6, 3, 1, '#34d399'); R(43, 5, 1, 1, '#34d399');
+    R(39, 7, 7, 1, '#1f8a5c');
+  }
+  if (up.includes('shelf')) { // Bücherregal über dem Monitor
+    const bx = up.includes('bigmonitor') ? 49 : 51;
+    R(bx, 4, 18, 1, C.woodDark);
+    const books = ['#e74c3c', '#f39c12', '#3498db', '#9b59b6', '#2ecc71', '#e67e22', '#1abc9c'];
+    let x = bx + 1;
+    books.forEach((c, i) => { const h = 3 + (i % 2); R(x, 4 - h, 2, h, c); x += 2 + (i === 3 ? 2 : 0); });
+  }
+  if (up.includes('lights')) { // Lichterkette
+    R(0, 1, W, 1, '#2b3150');
+    const colors = ['#f87171', '#fbbf24', '#34d399', '#60a5fa', '#f472b6'];
+    for (let x = 2, i = 0; x < W; x += 5, i++) P(x, 2, ((t >> 2) + i) % 3 === 0 ? '#3a3f5c' : colors[i % colors.length]);
+  }
 
   // Wanduhr mit echter Uhrzeit
   const cx = 75, cy = 5;
@@ -119,6 +164,11 @@ function background(t, now) {
   for (let k = 1; k <= 3; k++) P(cx + Math.round(Math.sin(am) * k), cy - Math.round(Math.cos(am) * k), '#2b2f4a');
   for (let k = 1; k <= 2; k++) P(cx + Math.round(Math.sin(ah) * k), cy - Math.round(Math.cos(ah) * k), '#c0392b');
   P(cx, cy, C.eye);
+  if (nextShift?.at) { // Markierung der nächsten Schicht am Zifferblatt
+    const nd = new Date(nextShift.at);
+    const an = ((nd.getHours() % 12) / 12 + nd.getMinutes() / 720) * Math.PI * 2;
+    P(cx + Math.round(Math.sin(an) * 3), cy - Math.round(Math.cos(an) * 3), t % 8 < 5 ? '#fbbf24' : '#e6e8f4');
+  }
 
   // Topfpflanze, wiegt sich leicht
   const sway = (t >> 3) % 2;
@@ -130,6 +180,12 @@ function background(t, now) {
   P(3 + sway, 30, '#3cc46d');
   P(10 + sway, 28, '#3cc46d');
   P(6 + sway, 28, '#2f9e57');
+}
+
+function nightShade() {
+  g.globalAlpha = 0.32;
+  R(0, 0, W, H, '#05071a');
+  g.globalAlpha = 1;
 }
 
 function chair() {
@@ -254,44 +310,47 @@ function mugOnDesk(t, steam) {
   }
 }
 
-function monitor(screen, t) {
-  R(50, 8, 19, 14, C.frame);
+function monitor(screen, t, big = false) {
+  if (big) R(47, 6, 24, 16, C.frame);
+  else R(50, 8, 19, 14, C.frame);
   R(58, 22, 3, 1, C.frame);
   R(55, 23, 9, 1, C.frame);
-  const sx = 52, sy = 10, sw = 15, sh = 10;
+  const [sx, sy, sw, sh] = big ? [49, 8, 20, 12] : [52, 10, 15, 10];
   let led = '#34d399';
   switch (screen) {
     case 'code': {
       R(sx, sy, sw, sh, '#0b1a2b');
       const colors = ['#22d3ee', '#34d399', '#a78bfa', '#fbbf24'];
       const row = Math.floor(t / 8);
-      for (let i = 0; i < 4; i++) {
-        const n = row - 3 + i;
+      const rows = Math.floor((sh - 1) / 2);
+      for (let i = 0; i < rows; i++) {
+        const n = row - rows + 1 + i;
         const indent = Math.floor(noise(n * 7) * 3) * 2;
         const full = 3 + Math.floor(noise(n * 13) * 8);
-        const len = i === 3 ? Math.min(full, (t % 8) + 1) : full;
+        const len = i === rows - 1 ? Math.min(full, (t % 8) + 1) : full;
         R(sx + 1 + indent, sy + 1 + i * 2, Math.min(len, sw - 2 - indent), 1, colors[(n >>> 0) % 4]);
-        if (i === 3 && t % 4 < 2) P(sx + 1 + indent + Math.min(len, sw - 2 - indent), sy + 1 + i * 2, '#ffffff');
+        if (i === rows - 1 && t % 4 < 2) P(sx + 1 + indent + Math.min(len, sw - 2 - indent), sy + 1 + i * 2, '#ffffff');
       }
       break;
     }
     case 'dots':
       R(sx, sy, sw, sh, '#141836');
-      for (let i = 0; i < 3; i++) R(sx + 3 + i * 4, sy + 4, 2, 2, ((t >> 1) % 4) > i ? '#a78bfa' : '#2c3363');
+      for (let i = 0; i < 3; i++) R(sx + Math.floor(sw / 2) - 5 + i * 4, sy + Math.floor(sh / 2) - 1, 2, 2, ((t >> 1) % 4) > i ? '#a78bfa' : '#2c3363');
       break;
     case 'check':
       R(sx, sy, sw, sh, '#0f2a1f');
-      for (const [x, y] of [[4, 5], [5, 6], [6, 7], [7, 6], [8, 5], [9, 4], [10, 3]]) R(sx + x, sy + y, 2, 1, '#34d399');
+      for (const [x, y] of [[4, 5], [5, 6], [6, 7], [7, 6], [8, 5], [9, 4], [10, 3]]) R(sx + x + Math.floor((sw - 15) / 2), sy + y + Math.floor((sh - 10) / 2), 2, 1, '#34d399');
       break;
     case 'error':
       led = '#f87171';
       R(sx, sy, sw, sh, t % 4 < 2 ? '#3a1015' : '#2a0c10');
-      for (let k = 0; k < 6; k++) { P(sx + 4 + k, sy + 2 + k, '#f87171'); P(sx + 9 - k, sy + 2 + k, '#f87171'); }
+      const ox = Math.floor((sw - 15) / 2), oy = Math.floor((sh - 10) / 2);
+      for (let k = 0; k < 6; k++) { P(sx + 4 + ox + k, sy + 2 + oy + k, '#f87171'); P(sx + 9 + ox - k, sy + 2 + oy + k, '#f87171'); }
       break;
     case 'hourglass': {
       led = '#fbbf24';
       R(sx, sy, sw, sh, '#161a33');
-      const hx = sx + 5;
+      const hx = sx + Math.floor(sw / 2) - 2;
       R(hx, sy + 1, 5, 1, '#fbbf24'); R(hx, sy + 8, 5, 1, '#fbbf24');
       R(hx + 1, sy + 2, 3, 1, '#7a6a3a'); P(hx + 2, sy + 3, '#7a6a3a'); P(hx + 2, sy + 5, '#7a6a3a'); R(hx + 1, sy + 6, 3, 1, '#7a6a3a'); R(hx + 1, sy + 7, 3, 1, '#7a6a3a');
       const fill = (t >> 2) % 4;
@@ -311,7 +370,45 @@ function monitor(screen, t) {
       P(sx + tri(t, sw - 1), sy + tri(Math.floor(t * 0.7), sh - 1), colors[(t >> 4) % 4]);
     }
   }
-  P(66, 20, led);
+  P(big ? 68 : 66, big ? 20 : 20, led);
+}
+
+// Upgrades auf und unter dem Schreibtisch
+function deskUpgrades(t, up, night) {
+  if (up.includes('lamp')) { // Schreibtischlampe, nachts mit Lichtkegel
+    if (night) {
+      g.globalAlpha = 0.16;
+      R(42, 17, 12, 7, '#ffd27a');
+      R(44, 15, 8, 2, '#ffd27a');
+      g.globalAlpha = 1;
+    }
+    R(46, 23, 4, 1, '#2b2f4a');
+    R(47, 18, 1, 5, '#59607f');
+    R(45, 16, 4, 2, '#fbbf24');
+    P(46, 18, night ? '#fff3c4' : '#c99a2e');
+  }
+  if (up.includes('coffee')) { // Kaffeemaschine
+    R(75, 14, 4, 10, '#3a3f55');
+    R(75, 14, 4, 2, '#22263a');
+    P(76, 17, t % 8 < 4 ? '#f87171' : '#7a2f3a');
+    R(76, 19, 2, 1, '#22263a');
+    R(76, 21, 2, 2, C.mug);
+  }
+}
+
+function cat(t) { // schlafende Katze unter dem Tisch
+  const tail = (t >> 2) % 4;
+  R(50, 39, 7, 2, '#e8964a');
+  R(51, 38, 5, 1, '#e8964a');
+  R(56, 37, 3, 3, '#e8964a');
+  P(56, 36, '#e8964a');
+  P(58, 36, '#e8964a');
+  P(57, 38, '#5a3a20');
+  R(52, 39, 1, 1, '#c97a32');
+  R(54, 39, 1, 1, '#c97a32');
+  R(47, 40 - (tail === 1 ? 1 : 0), 3, 1, '#e8964a');
+  P(47, 39 - (tail === 2 ? 1 : 0), '#e8964a');
+  if ((t >> 4) % 3 === 0) { g.globalAlpha = 0.7; P(60, 35 - ((t >> 2) % 3), '#cdd6ff'); g.globalAlpha = 1; }
 }
 
 function zzz(x, y, lt) {
@@ -348,12 +445,16 @@ export function drawScene(ctx, input, now = Date.now()) {
   g = ctx;
   ctx.imageSmoothingEnabled = false;
   const t = Math.floor(now / TICK_MS);
+  const up = input.upgrades || [];
+  const night = isNight(now);
   if (input.empty) { // freier Platz: leeres Büro mit unbesetztem Stuhl
-    background(t, now);
+    background(t, now, up);
+    if (night) nightShade();
     R(32, 27, 2, 15, shade(C.woodDark, 0.8));
     chair();
     desk();
-    monitor('off', t);
+    monitor('off', t, up.includes('bigmonitor'));
+    deskUpgrades(t, up, night);
     return;
   }
   const look = input.look;
@@ -384,7 +485,8 @@ export function drawScene(ctx, input, now = Date.now()) {
   const hy = 8 + dy + hdy;
   const screen = { working: 'code', thinking: 'dots', feedback: 'check', error: 'error', waiting: 'hourglass' }[input.phase] || (mode === 'doze' ? 'off' : 'saver');
 
-  background(t, now);
+  background(t, now, up, input.nextShift);
+  if (night) nightShade();
   if (screen === 'code' || screen === 'check') { // Monitorschein
     g.globalAlpha = 0.1;
     R(44, 4, 32, 22, screen === 'code' ? '#22d3ee' : '#34d399');
@@ -392,6 +494,7 @@ export function drawScene(ctx, input, now = Date.now()) {
   }
   R(32, 27, 2, 15, shade(C.woodDark, 0.8)); // hinteres Tischbein
   chair();
+  if (up.includes('cat')) cat(t);
   legs(tap);
 
   // Arme hinter Körper bzw. Kopf
@@ -410,7 +513,8 @@ export function drawScene(ctx, input, now = Date.now()) {
   torso(dy, shirt, shirtD, skinD, look.acc);
   head(hx, hy, look, skin, skinD, hairC, eyes, mouth, flip);
   desk();
-  monitor(screen, t);
+  monitor(screen, t, up.includes('bigmonitor'));
+  deskUpgrades(t, up, night);
   if (mode !== 'coffee') mugOnDesk(t, input.phase === 'idle' && mode !== 'doze');
 
   // Vorderer Arm

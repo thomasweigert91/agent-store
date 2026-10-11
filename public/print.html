@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ergebnisse drucken</title>
+  <style>
+    :root { --text: #1d2033; --muted: #5d6280; --line: #d9dcea; --accent: #b7791f; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 32px; font: 14px/1.6 'Segoe UI', system-ui, sans-serif; color: var(--text); background: #fff; }
+    header { border-bottom: 3px solid var(--accent); padding-bottom: 12px; margin-bottom: 24px; }
+    h1 { margin: 0; font-size: 24px; }
+    .sub { color: var(--muted); font-size: 12px; }
+    .bar { display: flex; gap: 8px; margin-top: 12px; }
+    .bar button { padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: #f6f7fb; cursor: pointer; font-weight: 600; }
+    article { break-inside: avoid-page; border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin-bottom: 18px; }
+    article h2 { margin: 0 0 4px; font-size: 15px; }
+    .meta { color: var(--muted); font-size: 11.5px; margin-bottom: 10px; }
+    .prompt { background: #f6f7fb; border-left: 3px solid var(--accent); padding: 8px 12px; font-size: 12.5px; white-space: pre-wrap; margin-bottom: 12px; }
+    .content h3, .content h4, .content h5 { margin: 12px 0 6px; }
+    .content p { margin: 6px 0; }
+    .content code { font-family: Consolas, monospace; font-size: 12px; background: #f1f2f7; padding: 1px 4px; border-radius: 4px; }
+    .content pre { background: #f6f7fb; padding: 10px; border-radius: 8px; overflow-x: auto; white-space: pre-wrap; }
+    .content table { border-collapse: collapse; margin: 8px 0; }
+    .content th, .content td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; }
+    .content blockquote { border-left: 3px solid var(--line); margin: 8px 0; padding: 2px 12px; color: var(--muted); }
+    .code-head .copy { display: none; }
+    .code-head { font-size: 11px; color: var(--muted); }
+    .empty { color: var(--muted); }
+    @media print { body { padding: 0; } .bar { display: none; } article { border-color: #ccc; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1 id="title">Ergebnisse</h1>
+    <div class="sub" id="sub">lädt…</div>
+    <div class="bar"><button onclick="window.print()">🖨 Drucken / Als PDF speichern</button><button onclick="window.close()">Schließen</button></div>
+  </header>
+  <main id="list"></main>
+  <script type="module" src="print.js"></script>
+</body>
+</html>

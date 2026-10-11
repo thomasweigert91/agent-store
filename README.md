@@ -57,8 +57,55 @@ In der App zeigen die Pillen oben rechts, welche Antriebe bereit sind (● grün
 - **Level:** Praktikant → Junior → Fachkraft → Profi → Experte → Meister → Großmeister → Legende.
 - **Claude-Abo-Anzeige:** Nach Claude-Aufträgen erscheint oben die Auslastung deines 5-Stunden- und 7-Tage-Limits.
 
-**Tastatur:** `1`…`0` öffnet den jeweiligen Schreibtisch · `s` Store · `m` Massenauftrag · `Esc` schließen ·
-`Strg+Enter` sendet in der Detailansicht.
+**Tastatur:** `1`…`0` öffnet den jeweiligen Schreibtisch · `s` Store · `q` Quest-Board · `p` Projekte ·
+`m` Massenauftrag · `Esc` schließen · `Strg+Enter` sendet in der Detailansicht.
+
+### 📜 Quest-Board
+
+Fertige Auftragsvorlagen zum Anklicken (Wochenrecherche, Produkttext, Code-Review, Blogpost, E-Mail-Antwort,
+Social-Media-Paket, Übersetzung, Brainstorming, Wettbewerbsanalyse, Projektplan). Felder ausfüllen, Agent wählen
+(der passende wird vorausgewählt), Projekt wählen, starten. Hat der Agent eine 🔗 Kette, läuft sie automatisch weiter.
+Eigene Vorlagen: **＋ Eigene Vorlage** – alles in `{{doppelten Klammern}}` wird beim Start als Feld abgefragt.
+
+### 🗓️ Schichtplan
+
+Wiederkehrende Aufträge zu festen Uhrzeiten an ausgewählten Wochentagen, z. B. Mo–Fr 08:00 „Fasse die News zu … zusammen“.
+Auf dem Schreibtisch zeigt **🗓️ 08:00** die nächste Schicht, an der Pixel-Wanduhr blinkt ein goldener Punkt an
+der Uhrzeit. Läuft, solange der Agent Store geöffnet ist; verpasste Schichten des laufenden Tages werden beim Start
+nachgeholt. **▶** startet eine Schicht sofort. Das Pixel-Büro wird abends (20–7 Uhr) dunkel, tagsüber scheint die Sonne.
+
+### 📁 Projekte & Ergebnis-Archiv
+
+- Oben in der Leiste wählst du das **aktive Projekt** – alle neuen Aufträge (Schreibtisch, Detailansicht, Quests,
+  Massenauftrag, Schichten) werden ihm zugeordnet. Übergaben behalten das Projekt bei.
+- Jedes Projekt hat einen **gemeinsamen Projektordner** (automatisch unter `workspaces/projekte/` oder ein eigener
+  Pfad). Claude- und Gemini-Abo-Agents bekommen per `--add-dir` Zugriff darauf und den Projektkontext mitgeschickt.
+- **Jedes Ergebnis** landet im Archiv (`data/archive.json`) und bei Projekten zusätzlich als Markdown-Datei in
+  `<Projektordner>/ergebnisse/` – nichts verschwindet mehr im Chatverlauf.
+- **📁 Projekte** zeigt alle Projekte mit Volltextsuche, Agent-Filter, **⬇ Markdown-Export** und **🖨 PDF**
+  (Druckansicht → „Als PDF speichern“).
+
+### 🧐 Prüfer-Runden & Freigabe
+
+- **Prüfer-Modus** (Ausrüstung): Bekommt der Agent ein Ergebnis übergeben, vergibt er eine Note (0–10). Unter der
+  Mindestnote geht es mit seiner Kritik **zurück an den Absender**, die Überarbeitung kommt automatisch wieder zur
+  Prüfung – bis die Note passt oder die maximale Rundenzahl erreicht ist (dann entscheidest du).
+  Freigegebene Ergebnisse laufen über die 🔗 Weitergabe des Prüfers weiter – und zwar der *freigegebene Text*, nicht die Kritik.
+- **Bonus:** +5 🪙 pro Freigabe, +15 🪙 extra bei Freigabe im ersten Anlauf.
+- **⏸️ Freigabe-Gate:** Bei einer Weitergabe „Vorher auf meine Freigabe warten“ anhaken – die Kette hält an, der
+  Agent zeigt RÜCKMELDUNG, und in der Detailansicht entscheidest du **✅ Freigeben** oder **✖ Nicht weitergeben**.
+
+### 🏗️ Progression
+
+- **Büro-Upgrades** (Store → Tab „Büro-Upgrades“): Pflanzen, Teppich, Poster, Lichterkette, Schreibtischlampe,
+  Bücherregal, Kaffeemaschine, großer Monitor, Bürokatze. Sie erscheinen in jedem Pixel-Büro und heben die
+  **Team-Moral um je 3 %** (= mehr Münzen pro Auftrag).
+- **🏆 Erfolge:** 18 Erfolge mit Münz-Belohnung, z. B. „10 Ketten abgeschlossen“, „Claude vs. Gemini: 20 Duelle“
+  (ein Massenauftrag mit mindestens einem Claude- und einem Gemini-Agent), „Sitzt beim ersten Mal“.
+- **⭐ Talente pro Level:** Level 3 Quellenkunde, Level 5 Selbstkontrolle, Level 7 Auf den Punkt (TL;DR),
+  Level 8 Mentor. Sie ergänzen automatisch den System-Prompt und lassen sich in der Ausrüstung abschalten.
+- **📊 Statistik:** Aufträge, Übergaben, Ketten, Duelle, Moral sowie pro Agent, Antrieb und Modell: Anzahl,
+  Ø Dauer, Ø Kosten (wo gemeldet) und Ø Prüfnote – inkl. schnellstem, günstigstem und beliebtestem Modell.
 
 ### 🔗 Übergaben & Ketten
 
@@ -97,8 +144,13 @@ agent-store/
 │  ├─ index.js              HTTP-Server, REST-API, statische Dateien, Sicherheits-Checks
 │  ├─ events.js             Server-Sent Events (Live-Updates an den Browser)
 │  ├─ store.js              Persistenz (data/state.json, data/settings.json), .env
-│  ├─ agents.js             Agent-Manager: Rekrutieren, Warteschlangen, Parallelität, Belohnungen
+│  ├─ agents.js             Agent-Manager: Warteschlangen, Parallelität, Belohnungen, Ketten, Prüfer, Freigaben
 │  ├─ catalog.js            Store-Katalog (12 Klassen), Namen, Level-Kurve
+│  ├─ archive.js            Ergebnis-Archiv (data/archive.json), Suche
+│  ├─ projects.js           Projekte, Projektordner, Markdown-Export
+│  ├─ templates.js          Quest-Board-Vorlagen mit {{Platzhaltern}}
+│  ├─ scheduler.js          Schichtplan (Prüfung alle 20 s)
+│  ├─ progress.js           Upgrades, Erfolge, Talente, Statistik
 │  └─ providers/
 │     ├─ claudeCli.js       claude -p --output-format stream-json (Session via --resume)
 │     ├─ antigravityCli.js  agy --print --output-format stream-json (Gedächtnis via --conversation)
@@ -109,7 +161,9 @@ agent-store/
 │     └─ proc.js / shared.js  Prozess-Handling, Abbruch (taskkill /T), SSE-Parser
 ├─ public/                  Oberfläche (Vanilla JS, kein Build-Schritt)
 │  ├─ index.html, styles.css, app.js, markdown.js
-│  └─ pixel.js              Pixel-Büroszenen (Canvas 80×48, 8 fps, Posen je Zustand)
+│  ├─ panels.js             Quest-Board, Schichtplan, Projekte/Archiv, Erfolge, Statistik, Upgrades
+│  ├─ print.html / print.js Druckansicht für den PDF-Export
+│  └─ pixel.js              Pixel-Büroszenen (Canvas 80×48, 8 fps, Posen, Tag/Nacht, Upgrades)
 ├─ data/                    Spielstand + Einstellungen (git-ignoriert)
 └─ workspaces/              Arbeitsordner der Agents (git-ignoriert)
 ```
@@ -137,11 +191,17 @@ API-Keys liegen nur lokal in `data/settings.json` bzw. `.env`.
 | GET | `/api/state` | Gesamter Zustand (Agents, Münzen, Katalog, Antriebe) |
 | GET | `/api/events` | SSE-Stream: `agent`, `delta`, `activity`, `questDone`, `game`, `limits`, … |
 | POST | `/api/agents` | Rekrutieren `{archetypeId, provider?, model?, slot?}` |
-| PATCH/DELETE | `/api/agents/:id` | Ausrüstung ändern (inkl. `relay: {toAgentId, instruction}`) / entlassen |
-| POST | `/api/agents/:id/tasks` | Auftrag `{prompt}` |
+| PATCH/DELETE | `/api/agents/:id` | Ausrüstung ändern (inkl. `relay`, `review`, `talentsOff`, `look`) / entlassen |
+| POST | `/api/agents/:id/tasks` | Auftrag `{prompt, projectId?}` |
 | POST | `/api/agents/:id/stop` · `/reset` · `/ack` · `/open-folder` | Steuerung |
 | POST | `/api/broadcast` | Massenauftrag `{agentIds, prompt}` |
 | POST | `/api/agents/:id/handoff` | Antwort weitergeben `{toAgentId, messageId?, instruction?}` |
+| POST | `/api/agents/:id/relay-decision` | Freigabe-Gate `{approve}` |
+| GET/POST/PATCH/DELETE | `/api/projects[/:id]` | Projekte; `PUT /api/active-project`, `GET /api/projects/:id/export` |
+| GET | `/api/archive?projectId&q&agentId` | Archiv durchsuchen |
+| GET/POST/DELETE | `/api/templates[/:id]` | Vorlagen; `POST /api/templates/:id/run {agentId, values, projectId}` |
+| GET/POST/PATCH/DELETE | `/api/schedules[/:id]` | Schichten; `POST /api/schedules/:id/run-now` |
+| GET | `/api/progress` · `/api/stats` | Upgrades/Erfolge/Talente · Statistik; `POST /api/upgrades/:id/buy` |
 | PUT | `/api/settings` | Keys, Parallelität, Sound |
 
 Schreibende Anfragen brauchen den Header `X-Agent-Store: 1`.
@@ -162,5 +222,5 @@ Schreibende Anfragen brauchen den Header `X-Agent-Store: 1`.
 
 ## 🗺️ Ideen für später
 
-Rückkopplung in Ketten (Kritiker schickt mit Verbesserungen zurück an den Texter), Quest-Vorlagen, Achievements,
-geplante Aufträge (z. B. jeden Morgen), Export der Ergebnisse als Markdown.
+Verzweigte Ketten (ein Ergebnis an mehrere Agents gleichzeitig), Wochenziele mit Belohnung, Büro-Upgrades pro
+Schreibtisch, Benachrichtigung aufs Handy, wenn eine Schicht fertig ist.

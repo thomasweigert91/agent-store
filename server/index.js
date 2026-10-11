@@ -8,6 +8,11 @@ import { addClient, emit } from './events.js';
 import { CATALOG, AVATARS } from './catalog.js';
 import { detectAll, providerStatus } from './providers/index.js';
 import * as agents from './agents.js';
+import * as archive from './archive.js';
+import * as projects from './projects.js';
+import * as templates from './templates.js';
+import * as scheduler from './scheduler.js';
+import * as progress from './progress.js';
 
 const PORT = Number(process.env.PORT) || 4777;
 const HOST = '127.0.0.1';
@@ -71,12 +76,19 @@ function fullState() {
     providers: providerStatus,
     settings: publicSettings(),
     limits: agents.limitsCache.value,
+    projects: projects.listProjects(),
+    projectIcons: projects.PROJECT_ICONS,
+    upgradeCatalog: progress.UPGRADES,
+    talentCatalog: progress.TALENTS,
   };
 }
 
 function openFolder(dir) {
   const cmd = process.platform === 'win32' ? 'explorer.exe' : process.platform === 'darwin' ? 'open' : 'xdg-open';
-  spawn(cmd, [dir], { detached: true, stdio: 'ignore' }).unref();
+  // Auf Servern ohne Desktop gibt es kein xdg-open – Fehler abfangen statt abzustürzen.
+  const child = spawn(cmd, [dir], { detached: true, stdio: 'ignore' });
+  child.on('error', () => {});
+  child.unref();
 }
 
 function serveStatic(req, res, pathname) {
@@ -107,15 +119,108 @@ const route = (method, pattern, handler) => {
 };
 
 route('GET', '/api/state', () => fullState());
+
+const notFound = (msg) => Object.assign(new Error(msg), { status: 404 });
+const emitProjects = () => emit('projects', projects.listProjects());
+
+// --- Projekte & Archiv
+route('GET', '/api/projects', () => projects.listProjects());
+route('POST', '/api/projects', (_, body) => {
+  const p = projects.createProject(body);
+  if (body.activate) projects.setActiveProject(p.id);
+  progress.checkAchievements();
+  emitProjects();
+  emit('game', agents.gameInfo());
+  return projects.publicProject(p);
+});
+route('PATCH', '/api/projects/:id', ({ id }, body) => { const p = projects.updateProject(id, body); emitProjects(); return projects.publicProject(p); });
+route('DELETE', '/api/projects/:id', ({ id }) => { projects.deleteProject(id); emitProjects(); emit('game', agents.gameInfo()); return { ok: true }; });
+route('PUT', '/api/active-project', (_, body) => { projects.setActiveProject(body.projectId || null); emit('game', agents.gameInfo()); return { ok: true }; });
+route('POST', '/api/projects/:id/open-folder', ({ id }) => {
+  const p = projects.findProject(id);
+  if (!p) throw notFound('Projekt nicht gefunden');
+  openFolder(projects.projectFolder(p));
+  return { ok: true };
+});
+route('GET', '/api/projects/:id/export', ({ id }) => {
+  const { filename, body } = projects.exportMarkdown(id);
+  return { __raw: { type: 'text/markdown; charset=utf-8', filename, body } };
+});
+route('GET', '/api/archive', (_, __, url) => archive.query({
+  projectId: url.searchParams.get('projectId') || '',
+  q: url.searchParams.get('q') || '',
+  agentId: url.searchParams.get('agentId') || '',
+  limit: Math.min(5000, Number(url.searchParams.get('limit')) || 200),
+}));
+
+// --- Quest-Board
+route('GET', '/api/templates', () => templates.listTemplates());
+route('POST', '/api/templates', (_, body) => templates.createTemplate(body));
+route('DELETE', '/api/templates/:id', ({ id }) => { templates.deleteTemplate(id); return { ok: true }; });
+route('POST', '/api/templates/:id/run', ({ id }, body) => {
+  const t = templates.findTemplate(id);
+  if (!t) throw notFound('Vorlage nicht gefunden');
+  const agent = agents.enqueue(body.agentId, templates.fillTemplate(t, body.values), {
+    projectId: body.projectId === undefined ? undefined : body.projectId || null,
+    source: 'template',
+    templateTitle: t.title,
+  });
+  progress.bump('templateRuns');
+  progress.checkAchievements();
+  return agents.publicAgent(agent);
+});
+
+// --- Schichtplan
+const refreshShiftAgents = (...ids) => ids.filter(Boolean).forEach((id) => agents.refreshAgent(id));
+route('GET', '/api/schedules', () => scheduler.listSchedules());
+route('POST', '/api/schedules', (_, body) => { const s = scheduler.createSchedule(body); refreshShiftAgents(s.agentId); return s; });
+route('PATCH', '/api/schedules/:id', ({ id }, body) => {
+  const before = state.schedules.find((x) => x.id === id)?.agentId;
+  const s = scheduler.updateSchedule(id, body);
+  refreshShiftAgents(before, s.agentId);
+  return s;
+});
+route('DELETE', '/api/schedules/:id', ({ id }) => {
+  const before = state.schedules.find((x) => x.id === id)?.agentId;
+  scheduler.deleteSchedule(id);
+  refreshShiftAgents(before);
+  return { ok: true };
+});
+route('POST', '/api/schedules/:id/run-now', ({ id }) => {
+  const s = state.schedules.find((x) => x.id === id);
+  if (!s) throw notFound('Schicht nicht gefunden');
+  agents.enqueue(s.agentId, s.prompt, { projectId: s.projectId, source: 'schedule', scheduleTitle: s.title });
+  return { ok: true };
+});
+
+// --- Progression
+route('GET', '/api/progress', () => ({
+  upgrades: progress.UPGRADES.map((u) => ({ ...u, owned: state.upgrades.includes(u.id) })),
+  morale: progress.moraleFactor(),
+  achievements: progress.achievementList(),
+  talents: progress.TALENTS,
+}));
+route('POST', '/api/upgrades/:id/buy', ({ id }) => {
+  const u = progress.buyUpgrade(id);
+  progress.checkAchievements();
+  emit('game', agents.gameInfo());
+  emit('toast', { kind: 'recruit', text: `${u.icon} ${u.title} gekauft – Team-Moral steigt!` });
+  return { ok: true };
+});
+route('GET', '/api/stats', () => progress.statistics());
+
 route('GET', '/api/agents/:id', ({ id }) => {
   const a = agents.findAgent(id);
   if (!a) throw Object.assign(new Error('Agent nicht gefunden'), { status: 404 });
   return agents.publicAgent(a, { withMessages: true });
 });
-route('POST', '/api/agents', (_, body) => agents.publicAgent(agents.recruit(body)));
+route('POST', '/api/agents', (_, body) => { const a = agents.recruit(body); progress.checkAchievements(); return agents.publicAgent(a); });
 route('PATCH', '/api/agents/:id', ({ id }, body) => agents.publicAgent(agents.updateAgent(id, body)));
 route('DELETE', '/api/agents/:id', ({ id }) => { agents.dismiss(id); return { ok: true }; });
-route('POST', '/api/agents/:id/tasks', ({ id }, body) => agents.publicAgent(agents.enqueue(id, body.prompt)));
+route('POST', '/api/agents/:id/tasks', ({ id }, body) => agents.publicAgent(agents.enqueue(id, body.prompt, {
+  projectId: body.projectId === undefined ? undefined : body.projectId || null,
+})));
+route('POST', '/api/agents/:id/relay-decision', ({ id }, body) => { agents.relayDecision(id, Boolean(body.approve)); return { ok: true }; });
 route('POST', '/api/agents/:id/handoff', ({ id }, body) => agents.publicAgent(agents.handoff(id, {
   toAgentId: body.toAgentId,
   messageId: body.messageId,
@@ -134,8 +239,14 @@ route('POST', '/api/agents/:id/open-folder', ({ id }) => {
 route('POST', '/api/broadcast', (_, body) => {
   const ids = Array.isArray(body.agentIds) ? body.agentIds : [];
   if (!ids.length) throw Object.assign(new Error('Keine Agents ausgewählt'), { status: 400 });
-  for (const id of ids) agents.enqueue(id, body.prompt);
-  return { ok: true, count: ids.length };
+  const opts = { projectId: body.projectId === undefined ? undefined : body.projectId || null, source: 'broadcast' };
+  for (const id of ids) agents.enqueue(id, body.prompt, opts);
+  const chosen = ids.map((id) => agents.findAgent(id)).filter(Boolean);
+  const isClaude = (a) => a.provider.startsWith('claude');
+  const isGemini = (a) => ['antigravity-cli', 'gemini-cli', 'gemini-api'].includes(a.provider);
+  const duel = chosen.some(isClaude) && chosen.some(isGemini);
+  if (duel) { progress.bump('duels'); progress.checkAchievements(); }
+  return { ok: true, count: ids.length, duel };
 });
 route('POST', '/api/providers/refresh', async () => {
   await detectAll();
@@ -179,7 +290,16 @@ const server = http.createServer(async (req, res) => {
     const params = Object.fromEntries(r.keys.map((k, i) => [k, decodeURIComponent(m[i + 1])]));
     try {
       const body = req.method === 'GET' ? {} : await readBody(req);
-      const result = await r.handler(params, body);
+      const result = await r.handler(params, body, url);
+      if (result?.__raw) {
+        const { type, filename, body: raw } = result.__raw;
+        res.writeHead(200, {
+          'Content-Type': type,
+          'Cache-Control': 'no-store',
+          ...(filename ? { 'Content-Disposition': `attachment; filename="${filename.replace(/[^\w.\-]/g, '_')}"` } : {}),
+        });
+        return res.end(raw);
+      }
       return sendJson(res, 200, result ?? { ok: true });
     } catch (err) {
       if (!err.status) console.error(err);
@@ -193,6 +313,11 @@ const server = http.createServer(async (req, res) => {
 
 await detectAll();
 agents.recoverOnBoot();
+scheduler.startScheduler(
+  (id, prompt, opts) => agents.enqueue(id, prompt, opts),
+  (s) => { progress.bump('scheduledRuns'); progress.checkAchievements(); agents.refreshAgent(s.agentId); },
+);
+progress.checkAchievements(); // rückwirkend für bestehende Spielstände
 
 server.listen(PORT, HOST, () => {
   const ok = (id) => (providerStatus[id]?.available ? '✅' : '❌');

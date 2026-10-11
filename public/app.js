@@ -1,4 +1,5 @@
 import { renderMarkdown } from './markdown.js';
+import { initPanels } from './panels.js';
 import { registerScene, autoScale, lookFor, randomLook, PORTRAIT, HAIR_STYLES, HAIR_COLORS, SKINS, ACCESSORIES } from './pixel.js';
 
 // ---------------------------------------------------------------- State & helpers
@@ -14,6 +15,11 @@ const S = {
   tab: 'chat',
   detail: null,
   storeProvider: 'auto',
+  storeTab: 'agents',
+  projects: [],
+  projectIcons: [],
+  upgradeCatalog: [],
+  talentCatalog: [],
   storeSlot: null,
   online: false,
 };
@@ -122,7 +128,24 @@ function renderStats() {
   $('#stat-agents').textContent = `${g.agentCount ?? 0}/${g.maxAgents ?? MAX}`;
   $('#stat-working').textContent = g.working ?? 0;
   $('#stat-quests').textContent = g.totalQuests ?? 0;
+  $('#stat-morale').textContent = `${Math.round((g.morale || 1) * 100)}%`;
   $('#welcome').hidden = (g.agentCount ?? 0) > 0;
+  renderProjectPicker();
+}
+
+function renderProjectPicker() {
+  const sel = $('#active-project');
+  if (!sel || !panels) return;
+  sel.innerHTML = panels.projectOptions(S.game.activeProjectId, { none: 'Kein Projekt' }) + '<option value="__new">＋ Neues Projekt…</option>';
+  sel.value = S.game.activeProjectId || '';
+  const p = S.projects.find((x) => x.id === S.game.activeProjectId);
+  sel.parentElement.classList.toggle('active', Boolean(p));
+  sel.parentElement.style.setProperty('--pc', p?.color || 'var(--line2)');
+}
+
+function projectChip(id) {
+  const p = S.projects.find((x) => x.id === id);
+  return p ? `<span class="chip proj" style="--pc:${esc(p.color)}">${esc(p.icon)} ${esc(p.name)}</span>` : '';
 }
 
 function renderProviders() {
@@ -232,12 +255,12 @@ const PHASES = {
   waiting: { label: 'WARTET', detail: (a) => `Wartet auf freien Platz (${a.queue.length} in Warteschlange)` },
   thinking: { label: 'ÜBERLEGT', detail: (a) => a.live?.activity || 'denkt nach…' },
   working: { label: 'ARBEITET', detail: (a) => a.live?.activity || 'arbeitet…' },
-  feedback: { label: 'RÜCKMELDUNG', detail: () => 'Ergebnis fertig – klick zum Ansehen' },
+  feedback: { label: 'RÜCKMELDUNG', detail: (a) => (a.pendingRelay ? `⏸️ Freigabe nötig → ${a.pendingRelay.toName}` : 'Ergebnis fertig – klick zum Ansehen') },
   error: { label: 'PROBLEM', detail: () => 'Fehler – klick für Details' },
 };
 
 function sceneInput(a) {
-  return a ? { id: a.id, look: lookFor(a), color: a.color, phase: phaseOf(a) } : null;
+  return a ? { id: a.id, look: lookFor(a), color: a.color, phase: phaseOf(a), upgrades: S.game.upgrades || [], nextShift: a.nextShift } : null;
 }
 
 function buildDesk(a) {
@@ -249,6 +272,7 @@ function buildDesk(a) {
       <span class="chip prov"></span>
       <span class="chip autonomy" hidden></span>
       <span class="chip relay" hidden></span>
+      <span class="chip shift" hidden></span>
       <span class="badge-unread" hidden>!</span>
     </div>
     <div class="scene-wrap"><canvas class="scene"></canvas><span class="lvl"></span><span class="sym"></span></div>
@@ -277,6 +301,7 @@ function buildDesk(a) {
     prov: $('.chip.prov', el),
     autonomy: $('.chip.autonomy', el),
     relay: $('.chip.relay', el),
+    shift: $('.chip.shift', el),
     unread: $('.badge-unread', el),
     lvl: $('.scene-wrap .lvl', el),
     sym: $('.scene-wrap .sym', el),
@@ -332,7 +357,16 @@ function updateDesk(a) {
   const relayTo = a.relay?.toAgentId ? S.agents.get(a.relay.toAgentId) : null;
   r.relay.hidden = !relayTo;
   r.relay.textContent = relayTo ? `🔗 → ${relayTo.name}` : '';
-  r.relay.title = relayTo ? `Ergebnisse gehen automatisch an ${relayTo.name}${a.relay.instruction ? ': ' + a.relay.instruction : ''}` : '';
+  r.relay.title = relayTo ? `Ergebnisse gehen automatisch an ${relayTo.name}${a.relay.instruction ? ': ' + a.relay.instruction : ''}${a.relay.requireApproval ? ' (nach deiner Freigabe)' : ''}` : '';
+  if (relayTo && a.relay.requireApproval) r.relay.textContent += ' ⏸️';
+  if (a.review?.enabled) { r.relay.hidden = false; r.relay.textContent = `🧐 ≥${a.review.minScore}${relayTo ? ` · → ${relayTo.name}` : ''}`; r.relay.title = `Prüfer-Modus: gibt ab Note ${a.review.minScore}/10 frei, max. ${a.review.maxRounds} Runden` + (relayTo ? `, danach weiter an ${relayTo.name}` : ''); }
+  r.shift.hidden = !a.nextShift;
+  if (a.nextShift) {
+    const d = new Date(a.nextShift.at);
+    const today = d.toDateString() === new Date().toDateString();
+    r.shift.textContent = `🗓️ ${today ? '' : d.toLocaleDateString('de-DE', { weekday: 'short' }) + ' '}${a.nextShift.time}`;
+    r.shift.title = `Nächste Schicht: ${a.nextShift.title}`;
+  }
   r.unread.hidden = !(a.unread > 1) || a.running;
   r.unread.textContent = a.unread;
   r.unread.title = `${a.unread} ungelesene Ergebnisse`;
@@ -466,10 +500,16 @@ function messageHtml(m) {
       <div class="bubble">${esc(m.meta.instruction || '')}
         <details><summary>Ergebnis von ${esc(f.name)} anzeigen</summary><div class="handoff-result">${renderMarkdown(result)}</div></details>
       </div>
-      <div class="meta">${fmtTime(m.ts)}</div></div>`;
+      <div class="meta">${m.meta.round > 1 ? `<span class="chip">Runde ${m.meta.round}</span>` : ''}${projectChip(m.meta.projectId)}${fmtTime(m.ts)}</div></div>`;
   }
   if (m.role === 'user') {
-    return `<div class="msg user"><div class="bubble">${esc(m.text)}</div><div class="meta">${fmtTime(m.ts)}</div></div>`;
+    const tags = [
+      m.meta?.templateTitle ? `<span class="chip">📜 ${esc(m.meta.templateTitle)}</span>` : '',
+      m.meta?.scheduleTitle ? `<span class="chip">🗓️ ${esc(m.meta.scheduleTitle)}</span>` : '',
+      m.meta?.source === 'broadcast' ? '<span class="chip">📢 Massenauftrag</span>' : '',
+      projectChip(m.meta?.projectId),
+    ].join('');
+    return `<div class="msg user"><div class="bubble">${esc(m.text)}</div><div class="meta">${tags}${fmtTime(m.ts)}</div></div>`;
   }
   if (m.role === 'assistant') {
     const meta = m.meta || {};
@@ -477,7 +517,9 @@ function messageHtml(m) {
     if (meta.durationMs) bits.push(`⏱ ${fmtDuration(meta.durationMs)}`);
     if (meta.tools) bits.push(`🔧 ${meta.tools}`);
     if (meta.model) bits.push(esc(meta.model));
-    const reward = meta.coins ? `<span class="reward">+${meta.coins} 🪙 +${meta.xp} XP</span>` : '';
+    const reward = (meta.coins ? `<span class="reward">+${meta.coins} 🪙 +${meta.xp} XP</span>` : '')
+      + (typeof meta.score === 'number' ? `<span class="chip score ${meta.score >= meta.minScore ? 'ok' : 'bad'}">🧐 ${meta.score}/10 ${meta.score >= meta.minScore ? '✅' : '↩️'}</span>` : '')
+      + projectChip(meta.projectId);
     return `<div class="msg assistant" data-mid="${esc(m.id)}"><div class="bubble">${renderMarkdown(m.text)}</div><div class="meta">${bits.join(' · ')} ${reward}<button class="copy-msg" data-copy-mid="${esc(m.id)}">📋 kopieren</button><button class="copy-msg handoff-btn" data-handoff-mid="${esc(m.id)}">➡️ Weitergeben an …</button></div></div>`;
   }
   if (m.role === 'error') return `<div class="msg error"><div class="bubble">❌ ${esc(m.text)}</div><div class="meta">${fmtTime(m.ts)}</div></div>`;
@@ -506,9 +548,15 @@ function renderChat() {
 
   foot.innerHTML = `
     ${a.queue.length ? `<div class="queue-list">${a.queue.map((t, i) => `<div class="queue-item">📋 <span title="${esc(t.prompt)}">${i + 1}. ${esc(t.prompt)}</span><button class="btn btn-sm btn-ghost" data-unqueue="${esc(t.id)}" title="Aus Warteschlange entfernen">✕</button></div>`).join('')}</div>` : ''}
+    ${a.pendingRelay ? `<div class="approval-banner">
+      <span>⏸️ Ergebnis wartet auf deine Freigabe – Weitergabe an <b>${esc(a.pendingRelay.toName)}</b></span>
+      <button type="button" class="btn btn-sm btn-gold" id="relay-yes">✅ Freigeben</button>
+      <button type="button" class="btn btn-sm" id="relay-no">✖ Nicht weitergeben</button>
+    </div>` : ''}
     <form class="composer" id="composer">
       <textarea id="composer-text" placeholder="Neuer Auftrag an ${esc(a.name)}… (Strg+Enter zum Senden)"></textarea>
       <div class="composer-row">
+        <select id="composer-project" class="mini-select" title="Projekt für diesen Auftrag">${panels.projectOptions(S.game.activeProjectId, { none: '📄 Kein Projekt' })}</select>
         <span class="hint">${a.running ? 'Arbeitet gerade – neue Aufträge landen in der Warteschlange.' : '<span class="kbd">Strg</span>+<span class="kbd">Enter</span> senden'}</span>
         <button type="button" class="btn btn-sm btn-ghost" id="btn-folder" title="Arbeitsordner öffnen">📂 Ordner</button>
         <button type="button" class="btn btn-sm btn-ghost" id="btn-reset" title="Gedächtnis leeren und neue Session starten">🧹 Neue Session</button>
@@ -527,12 +575,14 @@ function renderChat() {
     const prompt = ta.value.trim();
     if (!prompt) return;
     try {
-      await api('POST', `/api/agents/${a.id}/tasks`, { prompt });
+      await api('POST', `/api/agents/${a.id}/tasks`, { prompt, projectId: $('#composer-project').value || null });
       ta.value = '';
       if (S.draft) delete S.draft[a.id];
     } catch (err) { toast(err.message, 'error'); }
   });
   $('#btn-folder').onclick = () => api('POST', `/api/agents/${a.id}/open-folder`).catch((e) => toast(e.message, 'error'));
+  const decide = (approve) => api('POST', `/api/agents/${a.id}/relay-decision`, { approve }).catch((e) => toast(e.message, 'error'));
+  if ($('#relay-yes')) { $('#relay-yes').onclick = () => decide(true); $('#relay-no').onclick = () => decide(false); }
   $('#btn-reset').onclick = async () => {
     if (!confirm(`Gedächtnis von ${a.name} leeren und neue Session starten?`)) return;
     try { await api('POST', `/api/agents/${a.id}/reset`); await loadDetail(); } catch (e) { toast(e.message, 'error'); }
@@ -625,7 +675,24 @@ function renderGear() {
         <div class="field">
           <label>Anweisung für die Weitergabe</label>
           <input name="relayInstruction" value="${esc(a.relay?.instruction || '')}" placeholder="z. B. Schreib daraus einen Blogpost.">
+          <label class="toggle" style="margin-top:8px"><input type="checkbox" name="relayApproval" ${a.relay?.requireApproval ? 'checked' : ''}> ⏸️ Vorher auf meine Freigabe warten</label>
         </div>
+      </div>
+      <div class="field gear-box">
+        <label class="toggle"><input type="checkbox" name="reviewEnabled" ${a.review?.enabled ? 'checked' : ''}> <b>🧐 Prüfer-Modus</b></label>
+        <div class="help">Bekommt dieser Agent ein Ergebnis übergeben, bewertet er es mit einer Note. Unter der Mindestnote geht es mit seiner Kritik zurück an den Absender – bis die Note passt oder die Runden aufgebraucht sind. Freigegebene Ergebnisse laufen über seine 🔗 Weitergabe weiter. Bonus: +15 🪙 bei Freigabe im ersten Anlauf.</div>
+        <div class="row2" style="margin-top:8px">
+          <div><div class="mini-label">Mindestnote</div><select name="reviewMin">${[5, 6, 7, 8, 9, 10].map((n) => `<option value="${n}" ${(a.review?.minScore ?? 7) === n ? 'selected' : ''}>${n}/10</option>`).join('')}</select></div>
+          <div><div class="mini-label">Max. Runden</div><select name="reviewRounds">${[1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${(a.review?.maxRounds ?? 3) === n ? 'selected' : ''}>${n}</option>`).join('')}</select></div>
+        </div>
+      </div>
+      <div class="field gear-box">
+        <label>⭐ Talente (schalten sich mit dem Level frei)</label>
+        <div class="talent-list">${S.talentCatalog.map((t) => {
+          const unlocked = a.level >= t.level;
+          const on = unlocked && !(a.talentsOff || []).includes(t.id);
+          return `<label class="talent ${unlocked ? '' : 'locked'}"><input type="checkbox" name="talent" value="${esc(t.id)}" ${on ? 'checked' : ''} ${unlocked ? '' : 'disabled'}><span class="t-lvl">LV ${t.level}</span><span>${esc(t.icon)} <b>${esc(t.title)}</b> – ${esc(t.desc)}</span></label>`;
+        }).join('')}</div>
       </div>
       <div class="field">
         <label>Persönlichkeit & Anweisungen (System-Prompt)</label>
@@ -688,7 +755,9 @@ function renderGear() {
         autonomy: f.get('autonomy'),
         workdir: f.get('workdir'),
         persona: f.get('persona'),
-        relay: f.get('relayTo') ? { toAgentId: f.get('relayTo'), instruction: f.get('relayInstruction') } : null,
+        relay: f.get('relayTo') ? { toAgentId: f.get('relayTo'), instruction: f.get('relayInstruction'), requireApproval: f.get('relayApproval') === 'on' } : null,
+        review: { enabled: f.get('reviewEnabled') === 'on', minScore: Number(f.get('reviewMin')), maxRounds: Number(f.get('reviewRounds')) },
+        talentsOff: S.talentCatalog.filter((t) => a.level >= t.level && !f.getAll('talent').includes(t.id)).map((t) => t.id),
       });
       toast('💾 Gespeichert');
       renderDrawer();
@@ -791,7 +860,12 @@ function renderStore() {
   }).join('');
   openModal(`
     <div class="modal-head"><h2>🛒 Agent Store${S.storeSlot !== null ? ` · für Schreibtisch ${S.storeSlot + 1}` : ''}</h2><button class="btn btn-ghost btn-icon" data-close>✕</button></div>
-    <div class="modal-body">
+    <div class="tabs store-tabs">
+      <button class="tab ${S.storeTab === 'agents' ? 'active' : ''}" data-stab="agents">👥 Agents</button>
+      <button class="tab ${S.storeTab === 'upgrades' ? 'active' : ''}" data-stab="upgrades">🏗️ Büro-Upgrades · Moral ${Math.round((S.game.morale || 1) * 100)}%</button>
+    </div>
+    <div class="modal-body" id="upgrade-body" ${S.storeTab === 'upgrades' ? '' : 'hidden'}></div>
+    <div class="modal-body" ${S.storeTab === 'agents' ? '' : 'hidden'}>
       <div class="store-bar">
         <div class="field"><label>Antrieb für neue Agents</label><select id="store-provider">${provOpts}</select></div>
         <div class="wallet">🪙 ${S.game.coins} · 👥 ${S.game.agentCount}/${MAX}</div>
@@ -804,6 +878,8 @@ function renderStore() {
     const input = { id: 'store-' + c.id, look: lookFor({ id: 'store-' + c.id, archetype: c.id }), color: c.color, phase: 'idle' };
     registerScene(cv, () => input, { crop: PORTRAIT });
   });
+  $('#modal-card').querySelectorAll('[data-stab]').forEach((b) => (b.onclick = () => { S.storeTab = b.dataset.stab; renderStore(); }));
+  if (S.storeTab === 'upgrades') panels.renderUpgrades($('#upgrade-body'));
   $('#store-provider').value = S.storeProvider;
   $('#store-provider').onchange = (e) => (S.storeProvider = e.target.value);
   $('#modal-card').querySelectorAll('[data-hire]').forEach((b) => (b.onclick = async () => {
@@ -836,7 +912,9 @@ function openBroadcast() {
       <p style="margin-top:0;color:var(--muted)">Gib mehreren Agents gleichzeitig denselben Auftrag – z. B. um Claude und Gemini zu vergleichen oder Arbeit zu verteilen.</p>
       <div style="display:flex;gap:8px;margin-bottom:10px"><button class="btn btn-sm" id="bc-all">Alle</button><button class="btn btn-sm" id="bc-idle">Nur freie</button><button class="btn btn-sm" id="bc-none">Keine</button></div>
       <div class="bc-list">${list.map((a) => `<label class="bc-item"><input type="checkbox" value="${esc(a.id)}" ${a.running ? '' : 'checked'}><span>${esc(a.avatar)}</span><span><div class="n">${esc(a.name)}</div><div class="s">${esc(providerShort(a))}${a.running ? ' · arbeitet' : ''}</div></span></label>`).join('')}</div>
+      <div class="field"><label>Projekt</label><select id="bc-project">${panels.projectOptions(S.game.activeProjectId)}</select></div>
       <div class="field"><label>Auftrag</label><textarea id="bc-text" rows="6" placeholder="Was sollen die ausgewählten Agents tun?"></textarea></div>
+      <div class="help">Tipp: Wähle einen Claude- und einen Gemini-Agent – das zählt als ⚔️ Duell.</div>
     </div>
     <div class="modal-foot"><button class="btn" data-close>Abbrechen</button><button class="btn btn-gold" id="bc-send">📢 An Auswahl senden</button></div>`, { narrow: true });
   const boxes = () => [...$('#modal-card').querySelectorAll('.bc-list input')];
@@ -849,8 +927,8 @@ function openBroadcast() {
     const prompt = $('#bc-text').value.trim();
     if (!agentIds.length || !prompt) return toast('Bitte Agents auswählen und Auftrag eingeben.');
     try {
-      const r = await api('POST', '/api/broadcast', { agentIds, prompt });
-      toast(`📢 Auftrag an ${r.count} Agents verteilt`);
+      const r = await api('POST', '/api/broadcast', { agentIds, prompt, projectId: $('#bc-project').value || null });
+      toast(r.duel ? `⚔️ Duell gestartet – ${r.count} Agents treten an` : `📢 Auftrag an ${r.count} Agents verteilt`);
       closeModal();
     } catch (err) { toast(err.message, 'error'); }
   };
@@ -980,7 +1058,12 @@ function connect() {
     updateDesk(a);
     if (S.openId === id && $('#live-activity')) $('#live-activity').textContent = text;
   });
-  on('game', (g) => { S.game = g; renderStats(); });
+  on('game', (g) => {
+    const upgradesChanged = (S.game.upgrades || []).length !== (g.upgrades || []).length;
+    S.game = g;
+    renderStats();
+    if (upgradesChanged && $('#modal').classList.contains('open') && S.storeTab === 'upgrades') renderStore();
+  });
   on('handoff', (h) => {
     ticker(`${h.fromAvatar} ${h.fromName} → ${h.toAvatar} ${h.toName} übergeben${h.auto ? ` (Kette, Schritt ${h.step})` : ''} · +${h.bonus} 🪙`);
     toast(`📨 ${h.fromName} → ${h.toName} übergeben (+${h.bonus} 🪙)`);
@@ -995,8 +1078,14 @@ function connect() {
     ticker(`${q.avatar} ${q.name} hat einen Auftrag erledigt (+${q.coins} 🪙).`);
     if (q.levelUp) {
       setTimeout(() => { toast(`⭐ LEVEL UP! ${q.name} ist jetzt Level ${q.levelUp} – ${q.levelTitle}`, 'levelup'); sound('level'); }, 500);
+      if (q.talent) setTimeout(() => toast(`🎁 Neues Talent für ${q.name}: ${q.talent}`, 'levelup'), 1400);
     } else sound('quest');
   });
+  on('achievement', (x) => {
+    setTimeout(() => { toast(`🏆 ERFOLG: ${x.icon} ${x.title} · +${x.reward} 🪙`, 'achievement'); sound('level'); }, 900);
+    ticker(`🏆 Erfolg freigeschaltet: ${x.title} (+${x.reward} 🪙)`);
+  });
+  on('projects', (list) => { S.projects = list; renderProjectPicker(); });
   on('toast', (t) => {
     toast(t.text, t.kind === 'error' ? 'error' : '');
     ticker(t.text);
@@ -1017,6 +1106,10 @@ async function loadState() {
     S.providers = st.providers;
     S.settings = st.settings;
     S.limits = st.limits || S.limits;
+    S.projects = st.projects || [];
+    S.projectIcons = st.projectIcons || [];
+    S.upgradeCatalog = st.upgradeCatalog || [];
+    S.talentCatalog = st.talentCatalog || [];
     S.agents = new Map(st.agents.map((a) => [a.id, a]));
     desks.forEach((d) => (d.agentId = undefined));
     renderStats();
@@ -1033,6 +1126,15 @@ async function loadState() {
 
 // ---------------------------------------------------------------- Global UI
 $('#btn-store').onclick = () => openStore();
+$('#btn-quests').onclick = () => panels.openQuests().catch((e) => toast(e.message, 'error'));
+$('#btn-schedule').onclick = () => panels.openSchedules().catch((e) => toast(e.message, 'error'));
+$('#btn-projects').onclick = () => panels.openProjects().catch((e) => toast(e.message, 'error'));
+$('#btn-achievements').onclick = () => panels.openAchievements().catch((e) => toast(e.message, 'error'));
+$('#btn-stats').onclick = () => panels.openStats().catch((e) => toast(e.message, 'error'));
+$('#active-project').onchange = async (e) => {
+  if (e.target.value === '__new') { e.target.value = S.game.activeProjectId || ''; panels.openProjects().then(() => $('#prj-new')?.click()); return; }
+  try { await api('PUT', '/api/active-project', { projectId: e.target.value || null }); } catch (err) { toast(err.message, 'error'); }
+};
 $('#welcome-store').onclick = () => openStore();
 $('#btn-broadcast').onclick = openBroadcast;
 $('#btn-settings').onclick = openSettings;
@@ -1052,9 +1154,12 @@ document.addEventListener('keydown', (e) => {
     const a = agentInSlot(slot);
     if (a) openDrawer(a.id); else openStore(slot);
   } else if (e.key === 's') openStore();
+  else if (e.key === 'q') $('#btn-quests').click();
+  else if (e.key === 'p') $('#btn-projects').click();
   else if (e.key === 'm') openBroadcast();
 });
 
+const panels = initPanels({ S, api, openModal, closeModal, toast, esc, renderMarkdown, providerShort, fmtDuration, fmtTime });
 initFloor();
 renderFloor();
 connect();

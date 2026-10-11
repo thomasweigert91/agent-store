@@ -28,6 +28,7 @@ async function resolveAgy() {
   }
   const candidates = [
     path.join(os.homedir(), '.gemini', 'bin', EXE),
+    path.join(os.homedir(), '.local', 'bin', EXE), // Linux-Installer (install.sh)
     path.join(process.env.LOCALAPPDATA || '', 'Programs', 'antigravity', 'bin', EXE),
   ];
   return candidates.find((c) => fs.existsSync(c)) || null;
@@ -64,7 +65,7 @@ function describeTool(name, params) {
   return `🔧 ${name}${detail ? ': ' + String(detail).slice(0, 80) : ''}`;
 }
 
-export async function run({ agent, prompt, persona, cwd, signal, onEvent }) {
+export async function run({ agent, prompt, persona, cwd, signal, onEvent, extraDirs = [] }) {
   if (!agyPath) await detect();
   if (!agyPath) throw new Error('Antigravity CLI (agy) ist nicht installiert.');
 
@@ -80,6 +81,7 @@ export async function run({ agent, prompt, persona, cwd, signal, onEvent }) {
     }
 
     const args = ['--output-format', 'stream-json', ...(PERMISSIONS[agent.autonomy] || [])];
+    for (const dir of extraDirs) args.push('--add-dir', dir);
     if (agent.model) args.push('--model', agent.model);
     if (conversationId) args.push('--conversation', conversationId);
     args.push(`--print=${text}`);
