@@ -135,7 +135,7 @@ export function recruit({ archetypeId, name, provider, model, slot }) {
 // Bevorzugten Provider nehmen, sonst den ersten verfügbaren.
 function pickDefaultProvider(preferred) {
   if (providerStatus[preferred]?.available) return preferred;
-  for (const id of ['claude-cli', 'gemini-cli', 'claude-api', 'gemini-api']) {
+  for (const id of ['claude-cli', 'antigravity-cli', 'claude-api', 'gemini-api']) {
     if (providerStatus[id]?.available) return id;
   }
   return 'demo';
@@ -352,6 +352,13 @@ export function recoverOnBoot() {
     }
     agent.queue ||= [];
     agent.messages ||= [];
+    // Gemini CLI ist für AI-Pro-Konten abgeschaltet → auf Antigravity umstellen.
+    if (agent.provider === 'gemini-cli' && providerStatus['antigravity-cli']?.available) {
+      agent.provider = 'antigravity-cli';
+      agent.model = '';
+      agent.sessionId = null;
+      addMessage(agent, { role: 'system', text: '🔄 Antrieb auf Gemini via Antigravity umgestellt (die Gemini CLI wird für AI-Pro-Konten nicht mehr unterstützt).' });
+    }
   }
   saveState(true);
   pump();

@@ -9,8 +9,8 @@ const IS_WIN = process.platform === 'win32';
 
 export const info = {
   id: 'gemini-cli',
-  label: 'Gemini (Abo via Gemini CLI)',
-  short: 'Gemini',
+  label: 'Gemini CLI (Legacy – nur Enterprise)',
+  short: 'Gemini CLI',
   modelSuggestions: ['gemini-3-pro-preview', 'gemini-2.5-pro', 'gemini-2.5-flash'],
   defaultModel: '',
 };

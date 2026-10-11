@@ -1,12 +1,14 @@
 // Registry aller Provider + Status-Erkennung.
 import * as claudeCli from './claudeCli.js';
 import * as geminiCli from './geminiCli.js';
+import * as antigravityCli from './antigravityCli.js';
 import * as anthropicApi from './anthropicApi.js';
 import * as geminiApi from './geminiApi.js';
 import * as demo from './demo.js';
 
 export const PROVIDERS = {
   [claudeCli.info.id]: claudeCli,
+  [antigravityCli.info.id]: antigravityCli,
   [geminiCli.info.id]: geminiCli,
   [anthropicApi.info.id]: anthropicApi,
   [geminiApi.info.id]: geminiApi,

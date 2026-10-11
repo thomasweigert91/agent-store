@@ -10,7 +10,7 @@ Angetrieben wird das Ganze von deinen **Abos**:
 | Antrieb | Wie | Kosten |
 |---|---|---|
 | **Claude (Abo)** | Claude Code CLI mit deinem Claude-Login (Pro/Max) | im Abo enthalten |
-| **Gemini (Abo)** | Gemini CLI mit „Login with Google“ (Google AI Pro) | im Abo enthalten |
+| **Gemini (Abo)** | Antigravity CLI `agy` mit deinem Google-AI-Pro-Konto | im Abo enthalten |
 | Claude API | Anthropic API-Key (optional) | pro Token |
 | Gemini API | Gemini API-Key aus Google AI Studio (optional) | pro Token / Free Tier |
 | Demo | simulierte Antworten zum Ausprobieren | kostenlos |
@@ -23,8 +23,9 @@ Voraussetzung: **Node.js 20.6+** (getestet mit Node 24). Es gibt **keine npm-Abh
 
 1. **Claude-Abo verbinden** – Claude Code ist bei dir bereits installiert. Falls du noch nicht eingeloggt bist:
    `claude-login.bat` doppelklicken, anmelden, mit `/exit` beenden.
-2. **Gemini-Abo verbinden** – die Gemini CLI ist installiert (`npm i -g @google/gemini-cli`).
-   `gemini-login.bat` doppelklicken → **„Login with Google“** wählen → mit deinem Google-AI-Pro-Konto anmelden → `/quit`.
+2. **Gemini-Abo verbinden** – über die **Antigravity CLI (`agy`)**, den Nachfolger der Gemini CLI
+   (Google hat die Gemini CLI für Google-AI-Pro-Konten im Juni 2026 abgeschaltet). `agy` kommt mit Antigravity
+   (https://antigravity.google). Falls nicht eingeloggt: `antigravity-login.bat` doppelklicken, anmelden, `/exit`.
 3. **Starten** – `start.bat` doppelklicken (oder `npm start`). Der Browser öffnet sich unter **http://localhost:4777**.
 4. Im **🛒 Store** den ersten Agent rekrutieren (der Allrounder ist gratis) und am Schreibtisch einen Auftrag eintippen.
 
@@ -53,12 +54,12 @@ In der App zeigen die Pillen oben rechts, welche Antriebe bereit sind (● grün
 
 ### Autonomie-Stufen (nur Abo-/CLI-Agents)
 
-| Stufe | Claude Code | Gemini CLI |
+| Stufe | Claude Code | Antigravity (`agy`) |
 |---|---|---|
 | 🔒 Sicher | Standard: liest, ändert nichts | Standard |
-| ✏️ Edits | `--permission-mode acceptEdits` | `--approval-mode auto_edit` |
-| 🤖 Auto | `--permission-mode auto` | `--approval-mode auto_edit` |
-| ⚠️ Voll | `--permission-mode bypassPermissions` | `--yolo` |
+| ✏️ Edits | `--permission-mode acceptEdits` | `--mode accept-edits` |
+| 🤖 Auto | `--permission-mode auto` | `--mode accept-edits` |
+| ⚠️ Voll | `--permission-mode bypassPermissions` | `--dangerously-skip-permissions` |
 
 Jeder Agent arbeitet in seinem eigenen Ordner unter `workspaces/`. Alternativ kannst du einen eigenen
 Arbeitsordner eintragen, z. B. ein echtes Projekt für den Coder.
@@ -69,7 +70,7 @@ Arbeitsordner eintragen, z. B. ein echtes Projekt für den Coder.
 
 ```
 agent-store/
-├─ start.bat / claude-login.bat / gemini-login.bat
+├─ start.bat / claude-login.bat / antigravity-login.bat
 ├─ server/                  Node.js, nur Standardbibliothek
 │  ├─ index.js              HTTP-Server, REST-API, statische Dateien, Sicherheits-Checks
 │  ├─ events.js             Server-Sent Events (Live-Updates an den Browser)
@@ -78,7 +79,8 @@ agent-store/
 │  ├─ catalog.js            Store-Katalog (12 Klassen), Namen, Level-Kurve
 │  └─ providers/
 │     ├─ claudeCli.js       claude -p --output-format stream-json (Session via --resume)
-│     ├─ geminiCli.js       gemini -o stream-json (Verlauf wird mitgeschickt)
+│     ├─ antigravityCli.js  agy --print --output-format stream-json (Gedächtnis via --conversation)
+│     ├─ geminiCli.js       Legacy Gemini CLI (nur noch für Enterprise-Lizenzen)
 │     ├─ anthropicApi.js    Messages API mit Streaming
 │     ├─ geminiApi.js       streamGenerateContent (SSE)
 │     ├─ demo.js            simulierter Agent
@@ -97,7 +99,8 @@ werden gutgeschrieben.
 **Abos statt API-Keys:** Für die CLI-Antriebe entfernt der Server `ANTHROPIC_API_KEY`/`GEMINI_API_KEY` aus der
 Umgebung der Kindprozesse, damit garantiert dein Abo-Login genutzt wird und kein API-Key belastet wird.
 
-**Gedächtnis:** Claude-Abo-Agents setzen ihre Claude-Code-Session fort (`--resume`). Gemini- und API-Agents
+**Gedächtnis:** Claude-Abo-Agents setzen ihre Claude-Code-Session fort (`--resume`), Gemini-Abo-Agents ihre
+Antigravity-Unterhaltung (`--conversation`). API-Agents
 bekommen die letzten Runden des Verlaufs mitgeschickt (einstellbar). „🧹 Neue Session“ leert das Gedächtnis.
 
 **Sicherheit:** Der Server lauscht nur auf `127.0.0.1`, prüft den Host-Header (gegen DNS-Rebinding) und
@@ -123,8 +126,12 @@ Schreibende Anfragen brauchen den Header `X-Agent-Store: 1`.
 
 ## 🛠️ Fehlerbehebung
 
-- **Gemini: „Please set an Auth method…“** → `gemini-login.bat` ausführen und „Login with Google“ wählen.
-- **Gemini-Modell nicht verfügbar** → das Modellfeld leer lassen, dann nimmt die CLI ihr Standardmodell.
+- **Gemini: „This client is no longer supported for Gemini Code Assist for individuals“** → das ist die alte
+  Gemini CLI. Den Antrieb „Gemini (Abo via Antigravity)“ verwenden (bestehende Agents werden beim Start automatisch umgestellt).
+- **Gemini via Antigravity nicht verfügbar** → `antigravity-login.bat` ausführen, danach ⚙️ → „Neu prüfen“.
+- **Gemini-Modell nicht verfügbar** → Modellfeld leer lassen (Standardmodell) oder einen Vorschlag aus der Liste wählen –
+  die Liste kommt live aus `agy models`.
+- **„Verweigert: RunCommand“** → der Agent wollte einen Befehl ausführen; Autonomie in der Ausrüstung erhöhen.
 - **Claude antwortet nicht / Login abgelaufen** → `claude-login.bat` ausführen.
 - **Port belegt** → in `.env` `PORT=4778` setzen (Vorlage: `.env.example`).
 - **Alles zurücksetzen** → ⚙️ Einstellungen → „Neues Spiel“ (oder `data/state.json` löschen).

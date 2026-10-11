@@ -45,7 +45,7 @@ function providerShort(a) {
   return a.model ? `${name} · ${a.model}` : name;
 }
 
-const PROVIDER_ORDER = ['claude-cli', 'gemini-cli', 'claude-api', 'gemini-api', 'demo'];
+const PROVIDER_ORDER = ['claude-cli', 'antigravity-cli', 'claude-api', 'gemini-api', 'demo', 'gemini-cli'];
 function providerList() {
   return PROVIDER_ORDER.map((id) => S.providers[id]).filter(Boolean);
 }
@@ -67,7 +67,7 @@ function fmtTime(ts) {
 }
 
 function plain(text, n = 320) {
-  const t = String(text || '').replace(/```[\w-]*\n?/g, '').replace(/[#*_`>|]/g, '').replace(/\n{3,}/g, '\n\n').trim();
+  const t = String(text || '').replace(/\[([^\]]+)\]\([^)\s]+\)/g, '$1').replace(/```[\w-]*\n?/g, '').replace(/[#*_`>|]/g, '').replace(/\n{3,}/g, '\n\n').trim();
   return t.length > n ? t.slice(-n) : t;
 }
 
@@ -130,7 +130,7 @@ function renderStats() {
 }
 
 function renderProviders() {
-  const order = ['claude-cli', 'gemini-cli', 'claude-api', 'gemini-api'];
+  const order = ['claude-cli', 'antigravity-cli', 'claude-api', 'gemini-api'];
   $('#providers').innerHTML = order
     .filter((id) => S.providers[id])
     .map((id) => {
@@ -539,7 +539,7 @@ function renderGear() {
           <label>Modell</label>
           <input name="model" id="gear-model" list="model-list" value="${esc(a.model)}" placeholder="leer = Standard des Anbieters">
           <datalist id="model-list">${(p.modelSuggestions || []).map((m) => `<option value="${esc(m)}">`).join('')}</datalist>
-          <div class="help">Claude-Abo: <code>sonnet</code>, <code>opus</code>, <code>haiku</code> · Gemini-Abo: z. B. <code>gemini-2.5-pro</code></div>
+          <div class="help">Claude-Abo: <code>sonnet</code>, <code>opus</code>, <code>haiku</code> · Gemini-Abo: z. B. <code>gemini-3.1-pro-high</code> (Vorschläge im Feld)</div>
         </div>
       </div>
       <div class="field">
@@ -736,8 +736,8 @@ function openSettings() {
       <div class="prov-list">${provRows}</div>
       <div style="margin-top:10px"><button class="btn btn-sm" id="prov-refresh">🔄 Neu prüfen</button></div>
       <div class="help" style="font-size:12px;color:var(--dim);margin-top:10px;line-height:1.5">
-        <b>Abos nutzen:</b> Claude läuft über die Claude Code CLI (dein Claude-Login), Gemini über die Gemini CLI mit
-        „Login with Google“ (dein Google-AI-Pro-Konto). Einrichtung siehe README.
+        <b>Abos nutzen:</b> Claude läuft über die Claude Code CLI (dein Claude-Login), Gemini über die Antigravity CLI
+        (<code>agy</code>, dein Google-AI-Pro-Konto). Einrichtung siehe README.
       </div>
 
       <div class="section-title">API-KEYS (OPTIONAL)</div>

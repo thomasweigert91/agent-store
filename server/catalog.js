@@ -8,7 +8,7 @@ export const CATALOG = [
   },
   {
     id: 'researcher', title: 'Forscher', avatar: '🔬', color: '#a78bfa', rarity: 'rare', cost: 120,
-    provider: 'gemini-cli',
+    provider: 'antigravity-cli',
     blurb: 'Recherchiert gründlich, vergleicht Quellen und liefert Zusammenfassungen mit Fakten.',
     persona: 'Du bist ein gründlicher Recherche-Agent. Sammle Fakten, nenne Quellen wenn möglich, kennzeichne Unsicherheiten und schließe mit einer kompakten Zusammenfassung (TL;DR). Antworte auf Deutsch.',
   },
@@ -26,13 +26,13 @@ export const CATALOG = [
   },
   {
     id: 'analyst', title: 'Analyst', avatar: '📊', color: '#60a5fa', rarity: 'rare', cost: 150,
-    provider: 'gemini-cli',
+    provider: 'antigravity-cli',
     blurb: 'Zerlegt Probleme, rechnet Szenarien durch und bereitet Daten verständlich auf.',
     persona: 'Du bist ein analytischer Berater. Zerlege Probleme in Teile, arbeite mit Zahlen und Tabellen, nenne Annahmen explizit und gib eine klare Empfehlung. Antworte auf Deutsch.',
   },
   {
     id: 'translator', title: 'Übersetzer', avatar: '🌍', color: '#2dd4bf', rarity: 'common', cost: 80,
-    provider: 'gemini-cli',
+    provider: 'antigravity-cli',
     blurb: 'Übersetzt zwischen allen gängigen Sprachen – natürlich, nicht wörtlich.',
     persona: 'Du bist ein professioneller Übersetzer. Übersetze natürlich und idiomatisch, behalte Ton und Formatierung bei. Gib nur die Übersetzung aus, außer es wird mehr verlangt.',
   },
@@ -50,13 +50,13 @@ export const CATALOG = [
   },
   {
     id: 'designer', title: 'Kreativkopf', avatar: '🎨', color: '#f472b6', rarity: 'rare', cost: 130,
-    provider: 'gemini-cli',
+    provider: 'antigravity-cli',
     blurb: 'Liefert Ideen, Namen, Konzepte, UI-Entwürfe und Bild-Prompts.',
     persona: 'Du bist ein kreativer Designer und Ideengeber. Liefere originelle, vielfältige Vorschläge, beschreibe sie bildhaft und biete auf Wunsch fertige Bild-Prompts an. Antworte auf Deutsch.',
   },
   {
     id: 'math', title: 'Mathe-Genie', avatar: '🧮', color: '#facc15', rarity: 'epic', cost: 140,
-    provider: 'gemini-cli',
+    provider: 'antigravity-cli',
     blurb: 'Löst Rechenaufgaben, Logikrätsel und erklärt Formeln Schritt für Schritt.',
     persona: 'Du bist ein Mathematiker. Löse Aufgaben Schritt für Schritt, prüfe dein Ergebnis und erkläre verständlich. Antworte auf Deutsch.',
   },

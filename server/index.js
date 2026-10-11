@@ -192,7 +192,7 @@ agents.recoverOnBoot();
 server.listen(PORT, HOST, () => {
   const ok = (id) => (providerStatus[id]?.available ? '✅' : '❌');
   console.log(`\n  🏢 Agent Store läuft auf  http://localhost:${PORT}\n`);
-  console.log(`  ${ok('claude-cli')} Claude (Abo)   ${ok('gemini-cli')} Gemini (Abo)   ${ok('claude-api')} Claude API   ${ok('gemini-api')} Gemini API   ✅ Demo\n`);
+  console.log(`  ${ok('claude-cli')} Claude (Abo)   ${ok('antigravity-cli')} Gemini (Abo)   ${ok('claude-api')} Claude API   ${ok('gemini-api')} Gemini API   ✅ Demo\n`);
   console.log('  Beenden mit Strg+C\n');
 });
 

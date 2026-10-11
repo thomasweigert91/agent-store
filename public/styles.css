@@ -189,7 +189,7 @@ main { position: relative; z-index: 1; flex: 1; padding: 22px; }
   max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .chip.p-claude-cli, .chip.p-claude-api { color: var(--claude); border-color: rgba(232,160,124,.4); }
-.chip.p-gemini-cli, .chip.p-gemini-api { color: var(--gemini); border-color: rgba(122,162,255,.4); }
+.chip.p-gemini-cli, .chip.p-gemini-api, .chip.p-antigravity-cli { color: var(--gemini); border-color: rgba(122,162,255,.4); }
 .chip.p-demo { color: var(--violet); border-color: rgba(167,139,250,.4); }
 .chip.autonomy { color: var(--gold); border-color: rgba(251,191,36,.35); }
 .badge-unread {
@@ -511,3 +511,4 @@ main { position: relative; z-index: 1; flex: 1; padding: 22px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+.file-ref { font-family: var(--mono); font-size: 12px; padding: 1px 6px; border-radius: 5px; background: rgba(122,162,255,.12); border: 1px solid rgba(122,162,255,.3); cursor: help; }
