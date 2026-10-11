@@ -240,8 +240,8 @@ main { position: relative; z-index: 1; flex: 1; padding: 22px; }
 .scene-wrap .sym { position: absolute; right: 7px; bottom: 3px; font-size: 13px; filter: drop-shadow(0 1px 0 #000); }
 
 .who { min-width: 0; padding: 8px 12px 0; }
-.who .name { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.who .cls { color: var(--muted); font-size: 12px; margin: 1px 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who .name { font-weight: 700; font-size: 15px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who .cls { color: var(--muted); font-size: 12px; line-height: 16px; margin: 1px 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .xp { height: 6px; background: #0b1024; border-radius: 4px; overflow: hidden; border: 1px solid var(--line); }
 .xp-fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--violet), var(--cyan)); transition: width .6s; }
 
@@ -317,17 +317,25 @@ main { position: relative; z-index: 1; flex: 1; padding: 22px; }
 .quick button { padding: 6px 11px; }
 
 .desk.empty {
-  align-items: center; justify-content: center; gap: 8px;
-  background: rgba(20, 27, 58, .35);
-  border: 2px dashed var(--line2);
+  background: rgba(20, 27, 58, .45);
+  border: 1px dashed var(--line2);
   box-shadow: none;
-  color: var(--dim);
 }
 .desk.empty::before { display: none; }
-.desk.empty:hover { border-color: var(--gold); color: var(--gold); }
-.desk.empty .plus { font-size: 34px; line-height: 1; }
-.desk.empty .slot-label { font-family: var(--pixel); font-size: 9px; }
-@media (max-width: 560px) { .desk.empty { min-height: 110px; } }
+.desk.empty .scene-wrap canvas { opacity: .55; filter: saturate(.6); transition: opacity .2s; }
+.desk.empty .scene-wrap .plus {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  font-size: 34px; color: var(--muted);
+  text-shadow: 0 2px 0 #000;
+}
+.desk.empty .who .name, .desk.empty .who .cls { color: var(--dim); }
+.desk.empty .state { --s: var(--dim); }
+.desk.empty .state .dot { box-shadow: none; }
+.desk.empty .quick .hire { flex: 1; justify-content: center; min-height: 35px; color: var(--muted); background: transparent; border-style: dashed; }
+.desk.empty:hover { border-color: var(--gold); }
+.desk.empty:hover .scene-wrap canvas { opacity: .85; }
+.desk.empty:hover .plus, .desk.empty:hover .quick .hire { color: var(--gold); border-color: var(--gold); }
 
 /* ---------- Ticker ---------- */
 .ticker {

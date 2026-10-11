@@ -193,10 +193,25 @@ function renderFloor() {
   }
 }
 
+// Freier Platz: gleicher Aufbau wie ein besetzter Schreibtisch, damit alle Karten gleich groß sind.
 function buildEmptyDesk(slot) {
   const el = document.createElement('article');
   el.className = 'desk empty';
-  el.innerHTML = `<div class="plus">＋</div><div class="slot-label">PLATZ ${slot + 1}</div><div>Agent rekrutieren</div>`;
+  el.innerHTML = `
+    <div class="desk-top"><span class="slot-no">#${slot + 1}</span><span class="chip">frei</span></div>
+    <div class="scene-wrap"><canvas class="scene"></canvas><span class="plus">＋</span></div>
+    <div class="who">
+      <div class="name">Platz ${slot + 1}</div>
+      <div class="cls">Noch niemand angestellt</div>
+      <div class="xp"><div class="xp-fill"></div></div>
+    </div>
+    <div class="statusbar">
+      <div class="status-row"><span class="state"><i class="dot"></i><b class="state-label">FREI</b></span></div>
+      <div class="detail">Klick, um einen Agent zu rekrutieren</div>
+    </div>
+    <div class="quick"><button class="btn btn-sm hire" type="button">🛒 Agent rekrutieren</button></div>`;
+  registerScene($('canvas.scene', el), () => ({ id: 'empty-' + slot, empty: true }));
+  autoScale($('.scene-wrap', el));
   el.addEventListener('click', () => openStore(slot));
   return el;
 }

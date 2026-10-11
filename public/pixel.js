@@ -348,6 +348,14 @@ export function drawScene(ctx, input, now = Date.now()) {
   g = ctx;
   ctx.imageSmoothingEnabled = false;
   const t = Math.floor(now / TICK_MS);
+  if (input.empty) { // freier Platz: leeres Büro mit unbesetztem Stuhl
+    background(t, now);
+    R(32, 27, 2, 15, shade(C.woodDark, 0.8));
+    chair();
+    desk();
+    monitor('off', t);
+    return;
+  }
   const look = input.look;
   const skin = SKINS[look.skin];
   const skinD = shade(skin, 0.8);
