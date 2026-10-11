@@ -20,7 +20,10 @@ export function killTree(child) {
   if (IS_WIN) {
     execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], () => {});
   } else {
-    try { child.kill('SIGTERM'); } catch { /* bereits beendet */ }
+    // Unter Linux/macOS läuft das Kind in einer eigenen Prozessgruppe → ganze Gruppe beenden.
+    try { process.kill(-child.pid, 'SIGTERM'); } catch {
+      try { child.kill('SIGTERM'); } catch { /* bereits beendet */ }
+    }
   }
 }
 
@@ -32,7 +35,7 @@ export function runLines({ cmd, args, cwd, input, signal, onLine, shell = false 
   return new Promise((resolve, reject) => {
     let child;
     try {
-      child = spawn(cmd, args, { cwd, env: cliEnv(), shell, windowsHide: true });
+      child = spawn(cmd, args, { cwd, env: cliEnv(), shell, windowsHide: true, detached: !IS_WIN });
     } catch (err) {
       return reject(err);
     }
