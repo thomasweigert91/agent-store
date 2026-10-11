@@ -36,13 +36,21 @@ In der App zeigen die Pillen oben rechts, welche Antriebe bereit sind (● grün
 
 ## 🎮 So spielst du
 
-- **Schreibtische (1–10):** Jeder Agent hat einen Platz mit Avatar, Level, XP-Balken, aktuellem Status,
-  Live-Vorschau des Textes, Laufzeit und Warteschlange.
-  - 💤 bereit · ⚡ arbeitet (Ring dreht sich, Text läuft live mit) · ✅ erledigt (goldener Rahmen, „!“) · ❌ Fehler
+- **Schreibtische (1–10):** Jeder Agent sitzt als kleine Pixel-Figur an seinem Schreibtisch – darunter Level,
+  XP-Balken, eine Aktivitätsanzeige mit Infozeile und die Chatleiste für Schnellaufträge.
+  | Anzeige | Die Figur … | Monitor |
+  |---|---|---|
+  | 🟢 BEREIT | döst, trinkt Kaffee, liest, streckt sich oder schaut sich um | Bildschirmschoner / aus |
+  | 🟣 ÜBERLEGT | stützt das Kinn auf, Denkblase mit Punkten | Lade-Punkte |
+  | 🔵 ARBEITET | tippt | Code läuft durch |
+  | 🟡 RÜCKMELDUNG | winkt mit „!“-Blase – Ergebnis wartet auf dich | grüner Haken |
+  | 🔴 PROBLEM | Hände am Kopf, Schweißtropfen | rotes X |
+  | 🟠 WARTET | schaut auf die Uhr, wippt mit dem Fuß | Sanduhr |
 - **Schnellauftrag:** Direkt ins Feld am Schreibtisch tippen und Enter drücken.
 - **Detailansicht:** Klick auf einen Agent öffnet den Verlauf mit formatierten Antworten, Live-Stream,
   Warteschlange, Stop, „Neue Session“ und „Ordner öffnen“.
-- **Ausrüstung (⚙️ im Agent):** Name, Avatar, Platz, Antrieb (Claude/Gemini/API/Demo), Modell,
+- **Ausrüstung (⚙️ im Agent):** Name, Aussehen der Figur (Frisur, Haarfarbe, Hautton, Accessoire, 🎲 Zufall),
+  Symbol für Meldungen, Platz, Antrieb (Claude/Gemini/API/Demo), Modell,
   Autonomie, Arbeitsordner und Persönlichkeit (System-Prompt).
 - **📢 Massenauftrag:** Derselbe Auftrag an mehrere Agents, z. B. um Claude und Gemini zu vergleichen.
 - **Wirtschaft:** Start mit 500 🪙. Jeder erledigte Auftrag bringt 15–75+ 🪙 und XP. Beim Entlassen gibt es 50 % zurück.
@@ -101,6 +109,7 @@ agent-store/
 │     └─ proc.js / shared.js  Prozess-Handling, Abbruch (taskkill /T), SSE-Parser
 ├─ public/                  Oberfläche (Vanilla JS, kein Build-Schritt)
 │  ├─ index.html, styles.css, app.js, markdown.js
+│  └─ pixel.js              Pixel-Büroszenen (Canvas 80×48, 8 fps, Posen je Zustand)
 ├─ data/                    Spielstand + Einstellungen (git-ignoriert)
 └─ workspaces/              Arbeitsordner der Agents (git-ignoriert)
 ```

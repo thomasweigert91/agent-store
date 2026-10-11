@@ -1,4 +1,5 @@
 import { renderMarkdown } from './markdown.js';
+import { registerScene, autoScale, lookFor, randomLook, PORTRAIT, HAIR_STYLES, HAIR_COLORS, SKINS, ACCESSORIES } from './pixel.js';
 
 // ---------------------------------------------------------------- State & helpers
 const S = {
@@ -64,11 +65,6 @@ function fmtDuration(ms) {
 
 function fmtTime(ts) {
   return new Date(ts).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-}
-
-function plain(text, n = 320) {
-  const t = String(text || '').replace(/\[([^\]]+)\]\([^)\s]+\)/g, '$1').replace(/```[\w-]*\n?/g, '').replace(/[#*_`>|]/g, '').replace(/\n{3,}/g, '\n\n').trim();
-  return t.length > n ? t.slice(-n) : t;
 }
 
 // ---------------------------------------------------------------- Sound
@@ -205,6 +201,30 @@ function buildEmptyDesk(slot) {
   return el;
 }
 
+// Zustand für Anzeige und Animation: arbeitet, überlegt, braucht Rückmeldung …
+const THINKING_RE = /denkt|startet|Session|liest|sammelt|sortiert|Anfrage|bereit|♻️/i;
+function phaseOf(a) {
+  if (!a) return 'idle';
+  if (a.running) return THINKING_RE.test(a.live?.activity || '⏳ startet') ? 'thinking' : 'working';
+  if (a.status === 'error') return 'error';
+  if (a.status === 'done' || a.unread > 0) return 'feedback';
+  if (a.queue?.length) return 'waiting';
+  return 'idle';
+}
+
+const PHASES = {
+  idle: { label: 'BEREIT', detail: () => 'Bereit für Aufträge' },
+  waiting: { label: 'WARTET', detail: (a) => `Wartet auf freien Platz (${a.queue.length} in Warteschlange)` },
+  thinking: { label: 'ÜBERLEGT', detail: (a) => a.live?.activity || 'denkt nach…' },
+  working: { label: 'ARBEITET', detail: (a) => a.live?.activity || 'arbeitet…' },
+  feedback: { label: 'RÜCKMELDUNG', detail: () => 'Ergebnis fertig – klick zum Ansehen' },
+  error: { label: 'PROBLEM', detail: () => 'Fehler – klick für Details' },
+};
+
+function sceneInput(a) {
+  return a ? { id: a.id, look: lookFor(a), color: a.color, phase: phaseOf(a) } : null;
+}
+
 function buildDesk(a) {
   const el = document.createElement('article');
   el.className = 'desk';
@@ -216,21 +236,21 @@ function buildDesk(a) {
       <span class="chip relay" hidden></span>
       <span class="badge-unread" hidden>!</span>
     </div>
-    <div class="desk-body">
-      <div class="avatar"><span class="emoji"></span><span class="ring"></span><span class="zzz">z</span><span class="lvl"></span></div>
-      <div class="who">
-        <div class="name"></div>
-        <div class="cls"></div>
-        <div class="xp"><div class="xp-fill"></div></div>
-      </div>
+    <div class="scene-wrap"><canvas class="scene"></canvas><span class="lvl"></span><span class="sym"></span></div>
+    <div class="who">
+      <div class="name"></div>
+      <div class="cls"></div>
+      <div class="xp"><div class="xp-fill"></div></div>
     </div>
-    <div class="activity"></div>
-    <div class="preview"></div>
-    <div class="desk-foot">
-      <span class="timer"></span>
-      <span class="queue"></span>
-      <span class="spacer"></span>
-      <button class="btn btn-sm btn-danger stop" hidden title="Auftrag abbrechen">⏹ Stop</button>
+    <div class="statusbar">
+      <div class="status-row">
+        <span class="state"><i class="dot"></i><b class="state-label"></b></span>
+        <span class="spacer"></span>
+        <span class="queue"></span>
+        <span class="timer"></span>
+        <button class="stop" hidden title="Auftrag abbrechen">⏹</button>
+      </div>
+      <div class="detail"></div>
     </div>
     <form class="quick" autocomplete="off">
       <input name="prompt" placeholder="Auftrag geben… (Enter)" maxlength="100000">
@@ -243,13 +263,13 @@ function buildDesk(a) {
     autonomy: $('.chip.autonomy', el),
     relay: $('.chip.relay', el),
     unread: $('.badge-unread', el),
-    emoji: $('.emoji', el),
-    lvl: $('.lvl', el),
+    lvl: $('.scene-wrap .lvl', el),
+    sym: $('.scene-wrap .sym', el),
     name: $('.name', el),
     cls: $('.cls', el),
     xpFill: $('.xp-fill', el),
-    activity: $('.activity', el),
-    preview: $('.preview', el),
+    stateLabel: $('.state-label', el),
+    detail: $('.detail', el),
     timer: $('.timer', el),
     queue: $('.queue', el),
     stop: $('.stop', el),
@@ -257,6 +277,8 @@ function buildDesk(a) {
     input: $('.quick input', el),
   };
   const id = a.id;
+  registerScene($('canvas.scene', el), () => sceneInput(S.agents.get(id)));
+  autoScale($('.scene-wrap', el));
   el.addEventListener('click', (e) => {
     if (e.target.closest('.quick, .stop')) return;
     openDrawer(id);
@@ -282,7 +304,8 @@ function updateDesk(a) {
   if (!d?.refs || d.agentId !== a.id) return;
   const r = d.refs;
   const st = uiStatus(a);
-  r.el.className = `desk status-${st}${S.openId === a.id ? ' selected' : ''}`;
+  const phase = phaseOf(a);
+  r.el.className = `desk status-${st} phase-${phase}${S.openId === a.id ? ' selected' : ''}`;
   r.el.style.setProperty('--c', a.color || '#7dd3fc');
   r.slotNo.textContent = `#${a.slot + 1}`;
   r.prov.className = `chip prov p-${a.provider}`;
@@ -295,38 +318,26 @@ function updateDesk(a) {
   r.relay.hidden = !relayTo;
   r.relay.textContent = relayTo ? `🔗 → ${relayTo.name}` : '';
   r.relay.title = relayTo ? `Ergebnisse gehen automatisch an ${relayTo.name}${a.relay.instruction ? ': ' + a.relay.instruction : ''}` : '';
-  r.unread.hidden = !(a.unread > 0) || a.running;
-  r.unread.textContent = a.unread > 1 ? a.unread : '!';
-  r.emoji.textContent = a.avatar;
+  r.unread.hidden = !(a.unread > 1) || a.running;
+  r.unread.textContent = a.unread;
+  r.unread.title = `${a.unread} ungelesene Ergebnisse`;
   r.lvl.textContent = `LV ${a.level}`;
+  r.sym.textContent = a.avatar;
   r.name.textContent = a.name;
   r.cls.textContent = `${a.archetypeTitle} · ${a.levelTitle} · ${a.questsDone} ✔`;
   const pct = Math.round(((a.xp - a.xpFrom) / Math.max(1, a.xpTo - a.xpFrom)) * 100);
   r.xpFill.style.width = `${Math.min(100, Math.max(0, pct))}%`;
   r.xpFill.parentElement.title = `${a.xp} / ${a.xpTo} XP bis Level ${a.level + 1}`;
 
-  let act;
-  if (st === 'working') act = a.live?.activity || '⏳ arbeitet…';
-  else if (st === 'done') act = '✅ Auftrag erledigt – klick zum Ansehen';
-  else if (st === 'error') act = '❌ Fehler – klick für Details';
-  else if (a.queue.length) act = '⏳ wartet auf freien Platz…';
-  else act = '💤 bereit für Aufträge';
-  r.activity.textContent = act;
-  r.activity.title = act;
-
-  updatePreview(a);
-  r.queue.textContent = a.queue.length ? `📋 ${a.queue.length} in Warteschlange` : '';
+  const ph = PHASES[phase];
+  r.stateLabel.textContent = ph.label;
+  const detail = ph.detail(a);
+  r.detail.textContent = detail;
+  r.detail.title = detail;
+  r.queue.textContent = a.queue.length && phase !== 'waiting' ? `📋 ${a.queue.length}` : '';
+  r.queue.title = a.queue.length ? `${a.queue.length} Aufträge in der Warteschlange` : '';
   r.stop.hidden = !a.running;
   updateTimer(a);
-}
-
-function updatePreview(a) {
-  const r = desks[a.slot]?.refs;
-  if (!r || desks[a.slot].agentId !== a.id) return;
-  let text = '';
-  if (a.running) text = a.live?.partial ? a.live.partial.slice(-420) : (a.live?.prompt ? '› ' + a.live.prompt.slice(0, 200) : '');
-  else if (a.lastMessage) text = plain(a.lastMessage.text);
-  r.preview.textContent = text;
 }
 
 function updateTimer(a) {
@@ -408,7 +419,7 @@ function renderDrawer() {
   inner.style.setProperty('--c', a.color);
   inner.innerHTML = `
     <div class="dr-head" style="--c:${esc(a.color)}">
-      <div class="avatar"><span class="emoji">${esc(a.avatar)}</span><span class="lvl">LV ${a.level}</span></div>
+      <div class="avatar portrait"><canvas id="dr-portrait"></canvas><span class="lvl">LV ${a.level}</span></div>
       <div class="dr-title">
         <h2>${esc(a.name)} <span class="chip p-${esc(a.provider)}">${esc(providerShort(a))}</span></h2>
         <div class="sub">${esc(a.archetypeTitle)} · ${esc(a.levelTitle)} · ${a.questsDone} Aufträge · ${a.coinsEarned} 🪙 verdient</div>
@@ -422,6 +433,8 @@ function renderDrawer() {
     </div>
     <div class="dr-body" id="dr-body"></div>
     <div class="dr-foot" id="dr-foot"></div>`;
+  const portraitId = a.id;
+  registerScene($('#dr-portrait'), () => sceneInput(S.agents.get(portraitId)), { crop: PORTRAIT });
   $('#dr-close').onclick = closeDrawer;
   inner.querySelectorAll('.tab').forEach((t) => (t.onclick = () => { S.tab = t.dataset.tab; renderDrawer(); }));
   if (S.tab === 'chat') renderChat(); else renderGear();
@@ -546,7 +559,25 @@ function renderGear() {
         <div class="field"><label>Name</label><input name="name" value="${esc(a.name)}" maxlength="24"></div>
         <div class="field"><label>Platz</label><select name="slot">${Array.from({ length: MAX }, (_, i) => `<option value="${i}" ${i === a.slot ? 'selected' : ''}>Schreibtisch ${i + 1}</option>`).join('')}</select></div>
       </div>
-      <div class="field"><label>Avatar</label><div class="avatar-grid" id="avatar-grid">${S.avatars.map((e) => `<button type="button" class="${e === a.avatar ? 'on' : ''}" data-av="${esc(e)}">${esc(e)}</button>`).join('')}</div></div>
+      <div class="field">
+        <label>Aussehen</label>
+        <div class="look-editor">
+          <div class="look-preview"><canvas id="look-preview"></canvas></div>
+          <div class="look-fields">
+            <div class="row2">
+              <div><div class="mini-label">Frisur</div><select id="look-hair">${HAIR_STYLES.map((n, i) => `<option value="${i}">${esc(n)}</option>`).join('')}</select></div>
+              <div><div class="mini-label">Accessoire</div><select id="look-acc">${ACCESSORIES.map((n, i) => `<option value="${i}">${esc(n)}</option>`).join('')}</select></div>
+            </div>
+            <div class="mini-label">Haarfarbe</div>
+            <div class="swatches" id="look-hairColor">${HAIR_COLORS.map((c, i) => `<button type="button" data-i="${i}" style="background:${c}" title="Haarfarbe ${i + 1}"></button>`).join('')}</div>
+            <div class="mini-label">Hautton</div>
+            <div class="swatches" id="look-skin">${SKINS.map((c, i) => `<button type="button" data-i="${i}" style="background:${c}" title="Hautton ${i + 1}"></button>`).join('')}</div>
+            <button type="button" class="btn btn-sm" id="look-random">🎲 Zufällig</button>
+          </div>
+        </div>
+        <div class="help">Die Shirtfarbe ist die Farbe der Agent-Klasse.</div>
+      </div>
+      <div class="field"><label>Symbol (für Meldungen)</label><div class="avatar-grid" id="avatar-grid">${S.avatars.map((e) => `<button type="button" class="${e === a.avatar ? 'on' : ''}" data-av="${esc(e)}">${esc(e)}</button>`).join('')}</div></div>
       <div class="row2">
         <div class="field">
           <label>Antrieb (KI-Anbieter)</label>
@@ -594,6 +625,28 @@ function renderGear() {
   foot.innerHTML = '';
 
   let avatar = a.avatar;
+  let look = lookFor(a);
+  registerScene($('#look-preview'), () => ({ id: 'preview-' + a.id, look, color: a.color, phase: 'idle' }));
+  autoScale($('.look-preview'));
+  const syncLook = () => {
+    $('#look-hair').value = look.hair;
+    $('#look-acc').value = look.acc;
+    for (const key of ['hairColor', 'skin']) {
+      $(`#look-${key}`).querySelectorAll('button').forEach((b) => b.classList.toggle('on', Number(b.dataset.i) === look[key]));
+    }
+  };
+  syncLook();
+  $('#look-hair').onchange = (e) => { look = { ...look, hair: Number(e.target.value) }; };
+  $('#look-acc').onchange = (e) => { look = { ...look, acc: Number(e.target.value) }; };
+  for (const key of ['hairColor', 'skin']) {
+    $(`#look-${key}`).onclick = (e) => {
+      const b = e.target.closest('[data-i]');
+      if (!b) return;
+      look = { ...look, [key]: Number(b.dataset.i) };
+      syncLook();
+    };
+  }
+  $('#look-random').onclick = () => { look = randomLook(); syncLook(); };
   $('#avatar-grid').onclick = (e) => {
     const b = e.target.closest('[data-av]');
     if (!b) return;
@@ -614,6 +667,7 @@ function renderGear() {
         name: f.get('name'),
         slot: Number(f.get('slot')),
         avatar,
+        look,
         provider: f.get('provider'),
         model: f.get('model'),
         autonomy: f.get('autonomy'),
@@ -712,7 +766,7 @@ function renderStore() {
     const afford = S.game.coins >= c.cost;
     const rec = S.providers[c.provider];
     return `<div class="card r-${c.rarity}" style="--c:${esc(c.color)}">
-      <div class="top"><span class="big">${esc(c.avatar)}</span><div><h3>${esc(c.title)}</h3><div class="rar rar-${c.rarity}">${RARITY[c.rarity]}</div></div></div>
+      <div class="top"><span class="big portrait-sm"><canvas data-arch="${esc(c.id)}"></canvas></span><div><h3>${esc(c.title)}</h3><div class="rar rar-${c.rarity}">${RARITY[c.rarity]}</div></div></div>
       <p>${esc(c.blurb)}</p>
       <div class="prov">Empfohlen: ${esc(rec?.short || c.provider)}${c.autonomy ? ' · darf Dateien bearbeiten' : ''}</div>
       <button class="btn ${afford && !full ? 'btn-gold' : ''}" data-hire="${esc(c.id)}" ${afford && !full ? '' : 'disabled'}>
@@ -730,6 +784,11 @@ function renderStore() {
       ${full ? '<p style="color:var(--red)">Dein Team ist voll (10/10). Entlasse einen Agent, um Platz zu schaffen.</p>' : ''}
       <div class="store-grid">${cards}</div>
     </div>`);
+  $('#modal-card').querySelectorAll('canvas[data-arch]').forEach((cv) => {
+    const c = S.catalog.find((x) => x.id === cv.dataset.arch);
+    const input = { id: 'store-' + c.id, look: lookFor({ id: 'store-' + c.id, archetype: c.id }), color: c.color, phase: 'idle' };
+    registerScene(cv, () => input, { crop: PORTRAIT });
+  });
   $('#store-provider').value = S.storeProvider;
   $('#store-provider').onchange = (e) => (S.storeProvider = e.target.value);
   $('#modal-card').querySelectorAll('[data-hire]').forEach((b) => (b.onclick = async () => {
@@ -896,7 +955,6 @@ function connect() {
     a.live ||= { activity: '✍️ schreibt…', partial: '', startedAt: Date.now() };
     a.live.partial += text;
     if (a.live.partial.length > 12000) a.live.partial = a.live.partial.slice(-8000);
-    updatePreview(a);
     if (S.openId === id) scheduleLiveRender();
   });
   on('activity', ({ id, text }) => {

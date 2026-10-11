@@ -150,6 +150,10 @@ export function updateAgent(id, patch) {
   if (typeof patch.name === 'string' && patch.name.trim()) agent.name = patch.name.trim().slice(0, 24);
   if (typeof patch.avatar === 'string' && patch.avatar.trim()) agent.avatar = patch.avatar.trim().slice(0, 8);
   if (typeof patch.persona === 'string') agent.persona = patch.persona.slice(0, 8000);
+  if (patch.look && typeof patch.look === 'object') {
+    const idx = (v) => (Number.isInteger(v) && v >= 0 && v < 16 ? v : 0);
+    agent.look = { hair: idx(patch.look.hair), hairColor: idx(patch.look.hairColor), skin: idx(patch.look.skin), acc: idx(patch.look.acc) };
+  }
   if (typeof patch.color === 'string' && /^#[0-9a-f]{6}$/i.test(patch.color)) agent.color = patch.color;
   if (typeof patch.autonomy === 'string' && AUTONOMY.includes(patch.autonomy)) agent.autonomy = patch.autonomy;
   if (typeof patch.provider === 'string' && getProvider(patch.provider) && patch.provider !== agent.provider) {
