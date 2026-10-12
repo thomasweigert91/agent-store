@@ -597,12 +597,15 @@ function renderChat() {
     </div>` : ''}
     <form class="composer" id="composer">
       <textarea id="composer-text" placeholder="Neuer Auftrag an ${esc(a.name)}… (Strg+Enter zum Senden)"></textarea>
-      <div class="composer-row">
+      <div class="composer-row opts">
         <select id="composer-project" class="mini-select" title="Projekt für diesen Auftrag">${panels.projectOptions(a.projectId || S.game.activeProjectId, { none: '📄 Kein Projekt' })}</select>
         ${S.profiles.length ? `<select id="composer-profile" class="mini-select" title="Kontext-Profil für diesen Auftrag">${panels.profileOptions(null, { none: '🏢 Kein Profil', projectDefault: true })}</select>` : ''}
         <span class="hint">${a.running ? 'Arbeitet gerade – neue Aufträge landen in der Warteschlange.' : '<span class="kbd">Strg</span>+<span class="kbd">Enter</span> senden'}</span>
+      </div>
+      <div class="composer-row actions">
         <button type="button" class="btn btn-sm btn-ghost" id="btn-folder" title="Arbeitsordner öffnen">📂 Ordner</button>
         <button type="button" class="btn btn-sm btn-ghost" id="btn-reset" title="Gedächtnis leeren und neue Session starten">🧹 Neue Session</button>
+        <span class="spacer"></span>
         ${a.running ? '<button type="button" class="btn btn-sm btn-danger" id="btn-stop">⏹ Stop</button>' : ''}
         <button type="submit" class="btn btn-gold">➤ Beauftragen</button>
       </div>
@@ -1260,6 +1263,31 @@ document.addEventListener('keydown', (e) => {
   else if (e.key === 'k') $('#btn-planner').click();
   else if (e.key === 'm') openBroadcast();
 });
+
+// Breite des Detail-Fensters: Standard 56 % des Bildschirms, per Ziehen am linken Rand änderbar (wird gemerkt)
+(() => {
+  const drawer = document.querySelector('.drawer');
+  if (!drawer) return;
+  const apply = (w) => drawer.style.setProperty('--drawer-w', w ? `${w}px` : '');
+  try { apply(Number(localStorage.getItem('drawerW')) || 0); } catch { /* ohne Speicher ok */ }
+  const grip = document.createElement('div');
+  grip.className = 'drawer-grip';
+  grip.title = 'Ziehen: Breite ändern · Doppelklick: zurücksetzen';
+  drawer.prepend(grip);
+  grip.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    grip.setPointerCapture(e.pointerId);
+    const move = (ev) => apply(Math.round(Math.min(window.innerWidth - 40, Math.max(480, window.innerWidth - ev.clientX))));
+    const up = () => {
+      grip.removeEventListener('pointermove', move);
+      grip.removeEventListener('pointerup', up);
+      try { localStorage.setItem('drawerW', parseInt(drawer.style.getPropertyValue('--drawer-w')) || ''); } catch { /* egal */ }
+    };
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', up);
+  });
+  grip.addEventListener('dblclick', () => { apply(0); try { localStorage.removeItem('drawerW'); } catch { /* egal */ } });
+})();
 
 const panels = initPanels({ S, api, openModal, closeModal, toast, esc, renderMarkdown, providerShort, fmtDuration, fmtTime });
 initFloor();
