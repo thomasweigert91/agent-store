@@ -13,7 +13,8 @@ import { nextShiftFor, removeAgentSchedules } from './scheduler.js';
 import { findProfile, profilePreamble, resolveProfileId } from './profiles.js';
 import { linkResult, clearPending as clearPlanPending, removeAgent as removePlanAgent } from './planner.js';
 
-export const MAX_AGENTS = 10;
+export const MAX_AGENTS = 10;        // Plätze pro Büro
+const MAX_TOTAL_AGENTS = 60;         // Agents insgesamt (alle Projekte)
 const MAX_MESSAGES = 300;
 const PREVIEW_CHARS = 4000;
 const AUTONOMY = ['safe', 'edits', 'auto', 'full'];
@@ -37,7 +38,63 @@ export function findAgent(id) {
 }
 
 function workspaceFor(agent) {
-  return path.join(WORKSPACES_DIR, `${agent.slot + 1}-${agent.id}`);
+  if (!agent.workspaceDir) agent.workspaceDir = path.join(WORKSPACES_DIR, agent.id);
+  return agent.workspaceDir;
+}
+
+// ---------------------------------------------------------------- Teams & Büros
+// Jedes Projekt hat ein eigenes Büro mit 10 Plätzen, dazu das Büro "Kein Projekt" ('_').
+// Stammpersonal (projectId = null) sitzt in jedem Büro, Projekt-Agents nur in ihrem.
+const viewKey = (projectId) => projectId || '_';
+const activeView = () => viewKey(state.activeProjectId && state.projects.some((p) => p.id === state.activeProjectId) ? state.activeProjectId : null);
+const allViews = () => ['_', ...state.projects.map((p) => p.id)];
+const agentViews = (agent) => (agent.projectId ? [agent.projectId] : allViews());
+const inView = (agent, key) => !agent.projectId || agent.projectId === key;
+const viewAgents = (key, except = null) => state.agents.filter((a) => a !== except && inView(a, key));
+
+function freeSlot(key, preferred, except = null) {
+  const used = new Set(viewAgents(key, except).map((a) => a.slots?.[key]).filter((s) => s != null));
+  if (Number.isInteger(preferred) && preferred >= 0 && preferred < MAX_AGENTS && !used.has(preferred)) return preferred;
+  for (let i = 0; i < MAX_AGENTS; i++) if (!used.has(i)) return i;
+  return -1;
+}
+
+// Kapazität prüfen, bevor ein Agent in ein Büro (bzw. als Stammpersonal in alle) kommt.
+function checkCapacity(targetProjectId, except = null) {
+  const keys = targetProjectId ? [targetProjectId] : allViews();
+  for (const key of keys) {
+    if (viewAgents(key, except).length >= MAX_AGENTS) {
+      const p = state.projects.find((x) => x.id === key);
+      throw fail(400, `${p ? `Das Büro von „${p.name}“` : 'Das Büro „Kein Projekt“'} ist voll (${MAX_AGENTS} Plätze) – entlasse dort erst jemanden.`);
+    }
+  }
+}
+
+// Plätze aller Agents in allen Büros vergeben/aufräumen (ohne Doppelbelegung).
+export function ensureSlots() {
+  const views = allViews();
+  for (const key of views) {
+    const used = new Set();
+    for (const a of state.agents) {
+      a.slots ||= {};
+      if (!inView(a, key)) continue;
+      let s = a.slots[key];
+      if (s == null || used.has(s) || s >= MAX_AGENTS) {
+        const pref = Object.values(a.slots).find((v) => v != null && !used.has(v));
+        s = pref != null ? pref : null;
+        if (s == null || used.has(s)) { s = 0; while (used.has(s) && s < MAX_AGENTS) s++; }
+        a.slots[key] = s;
+      }
+      used.add(s);
+    }
+  }
+  for (const a of state.agents) {
+    for (const key of Object.keys(a.slots || {})) if (!views.includes(key) || !inView(a, key)) delete a.slots[key];
+  }
+}
+
+export function teamInfo() {
+  return { activeView: activeView(), views: allViews() };
 }
 
 export function agentCwd(agent) {
@@ -60,6 +117,8 @@ export function publicAgent(agent, { withMessages = false } = {}) {
     running: running.has(agent.id),
     live: l ? { activity: l.activity, partial: l.partial.slice(-PREVIEW_CHARS), startedAt: l.startedAt, prompt: l.prompt, tools: l.tools } : null,
     cwd: agent.workdir || workspaceFor(agent),
+    slot: agent.slots?.[activeView()] ?? null,   // Platz im aktuell angezeigten Büro
+    inView: inView(agent, activeView()),
     nextShift: nextShiftFor(agent.id),
     talents: activeTalents(agent).map((t) => t.id),
     messageCount: agent.messages.length,
@@ -90,8 +149,10 @@ export function gameInfo() {
     coins: state.coins,
     totalQuests: state.totalQuests,
     totalCoinsEarned: state.totalCoinsEarned,
-    agentCount: state.agents.length,
+    agentCount: viewAgents(activeView()).length,
+    totalAgents: state.agents.length,
     working: running.size,
+    workingElsewhere: state.agents.filter((a) => running.has(a.id) && !inView(a, activeView())).length,
     inboxCount: archive.countOpen() + state.agents.filter((a) => a.pendingRelay).length,
     maxAgents: MAX_AGENTS,
   };
@@ -104,29 +165,29 @@ function addMessage(agent, msg) {
   return m;
 }
 
-function firstFreeSlot() {
-  const used = new Set(state.agents.map((a) => a.slot));
-  for (let i = 0; i < MAX_AGENTS; i++) if (!used.has(i)) return i;
-  return -1;
-}
-
 function fail(status, message) {
   const err = new Error(message);
   err.status = status;
   return err;
 }
 
-export function recruit({ archetypeId, name, provider, model, slot }) {
+export function recruit({ archetypeId, name, provider, model, slot, projectId }) {
   const arch = CATALOG.find((c) => c.id === archetypeId);
   if (!arch) throw fail(400, 'Unbekannte Agent-Klasse.');
-  if (state.agents.length >= MAX_AGENTS) throw fail(400, `Maximal ${MAX_AGENTS} Agents – entlasse erst jemanden.`);
+  if (state.agents.length >= MAX_TOTAL_AGENTS) throw fail(400, `Maximal ${MAX_TOTAL_AGENTS} Agents insgesamt – entlasse erst jemanden.`);
+  // Standard: Projekt-Agent im aktiven Projekt; ohne aktives Projekt Stammpersonal.
+  const target = projectId === undefined ? (state.projects.some((p) => p.id === state.activeProjectId) ? state.activeProjectId : null) : projectId || null;
+  if (target && !state.projects.some((p) => p.id === target)) throw fail(400, 'Projekt nicht gefunden.');
+  checkCapacity(target);
   if (state.coins < arch.cost) throw fail(400, `Nicht genug Münzen (${state.coins}/${arch.cost}). Erledige Aufträge, um Münzen zu verdienen.`);
 
-  let targetSlot = Number.isInteger(slot) && slot >= 0 && slot < MAX_AGENTS && !state.agents.some((a) => a.slot === slot) ? slot : firstFreeSlot();
   const chosenProvider = getProvider(provider) ? provider : pickDefaultProvider(arch.provider);
+  const view = activeView();
   const agent = {
     id: uid(),
-    slot: targetSlot,
+    projectId: target,
+    slots: inView({ projectId: target }, view) ? { [view]: freeSlot(view, slot) } : {},
+    projectPrompts: {},
     name: (name || '').trim().slice(0, 24) || randomName(state.agents.map((a) => a.name)),
     archetype: arch.id,
     archetypeTitle: arch.title,
@@ -151,7 +212,9 @@ export function recruit({ archetypeId, name, provider, model, slot }) {
   };
   state.coins -= arch.cost;
   state.agents.push(agent);
-  addMessage(agent, { role: 'system', text: `${agent.avatar} ${agent.name} (${arch.title}) ist deinem Team beigetreten!` });
+  ensureSlots();
+  const teamName = target ? `dem Team von „${state.projects.find((p) => p.id === target).name}“` : 'dem Stammpersonal (alle Projekte)';
+  addMessage(agent, { role: 'system', text: `${agent.avatar} ${agent.name} (${arch.title}) ist ${teamName} beigetreten!` });
   saveState();
   pushUpdate(agent);
   pushGame();
@@ -219,10 +282,31 @@ export function updateAgent(id, patch) {
   if (Array.isArray(patch.talentsOff)) {
     agent.talentsOff = patch.talentsOff.filter((t) => TALENTS.some((x) => x.id === t));
   }
-  if (Number.isInteger(patch.slot) && patch.slot >= 0 && patch.slot < MAX_AGENTS && patch.slot !== agent.slot) {
-    const other = state.agents.find((a) => a.slot === patch.slot);
-    if (other) { other.slot = agent.slot; pushUpdate(other); }
-    agent.slot = patch.slot;
+  // Zugehörigkeit: Projekt-Agent oder Stammpersonal ('' / null)
+  if (patch.projectId !== undefined) {
+    const target = patch.projectId || null;
+    if (target && !state.projects.some((p) => p.id === target)) throw fail(400, 'Projekt nicht gefunden.');
+    if (target !== (agent.projectId || null)) {
+      checkCapacity(target, agent);
+      agent.projectId = target;
+      ensureSlots();
+      for (const a of state.agents) if (a !== agent) pushUpdate(a);
+    }
+  }
+  // Projekt-Ergänzungen zum Basis-Prompt (nur für Stammpersonal wirksam)
+  if (patch.projectPrompts && typeof patch.projectPrompts === 'object') {
+    agent.projectPrompts = {};
+    for (const [pid, text] of Object.entries(patch.projectPrompts)) {
+      const t = String(text || '').trim().slice(0, 4000);
+      if (t && state.projects.some((p) => p.id === pid)) agent.projectPrompts[pid] = t;
+    }
+  }
+  // Platz im aktuell angezeigten Büro tauschen
+  const view = activeView();
+  if (Number.isInteger(patch.slot) && patch.slot >= 0 && patch.slot < MAX_AGENTS && inView(agent, view) && patch.slot !== agent.slots?.[view]) {
+    const other = viewAgents(view, agent).find((a) => a.slots?.[view] === patch.slot);
+    if (other) { other.slots[view] = agent.slots[view]; pushUpdate(other); }
+    agent.slots[view] = patch.slot;
   }
   saveState();
   pushUpdate(agent);
@@ -259,7 +343,8 @@ export function enqueue(id, prompt, opts = {}) {
   const text = String(prompt || '').trim();
   if (!text) throw fail(400, 'Leerer Auftrag.');
   if (text.length > 100000) throw fail(400, 'Auftrag ist zu lang (max. 100.000 Zeichen).');
-  const projectId = opts.projectId !== undefined ? opts.projectId : state.activeProjectId;
+  // Standard-Projekt: das eigene Projekt des Agents, bei Stammpersonal das aktive Projekt.
+  const projectId = opts.projectId !== undefined ? opts.projectId : agent.projectId || state.activeProjectId;
   const project = findProject(projectId);
   agent.queue.push({
     id: uid(),
@@ -468,7 +553,8 @@ async function execute(agent) {
     const result = await provider.run({
       agent,
       prompt: (project ? projectPreamble(project) : '') + (profile ? profilePreamble(profile) : '') + task.prompt + (reviewMode ? REVIEW_SUFFIX : ''),
-      persona: personaWithTalents(agent),
+      persona: personaWithTalents(agent) + (!agent.projectId && project && agent.projectPrompts?.[project.id]
+        ? `\n\nZusätzlich im Projekt „${project.name}“:\n${agent.projectPrompts[project.id]}` : ''),
       history,
       cwd: agentCwd(agent),
       extraDirs: project ? [projectFolder(project)] : [],
@@ -669,6 +755,14 @@ function returnRevision(agent, task, msg) {
 // Beim Start: Aufträge, die beim letzten Beenden liefen, gelten als unterbrochen.
 export function recoverOnBoot() {
   for (const agent of state.agents) {
+    // Migration auf Teams: bestehende Agents werden Stammpersonal, Platz und Arbeitsordner bleiben.
+    if (!agent.slots) {
+      if (agent.projectId === undefined) agent.projectId = null;
+      agent.slots = { _: Number.isInteger(agent.slot) ? agent.slot : 0 };
+      if (!agent.workspaceDir) agent.workspaceDir = path.join(WORKSPACES_DIR, `${(Number.isInteger(agent.slot) ? agent.slot : 0) + 1}-${agent.id}`);
+      delete agent.slot;
+    }
+    agent.projectPrompts ||= {};
     if (agent.status === 'working') {
       addMessage(agent, { role: 'system', text: '⚠️ Der Server wurde während eines Auftrags beendet – Auftrag unterbrochen.' });
       agent.status = agent.queue.length ? 'idle' : 'error';
@@ -683,6 +777,7 @@ export function recoverOnBoot() {
       addMessage(agent, { role: 'system', text: '🔄 Antrieb auf Gemini via Antigravity umgestellt (die Gemini CLI wird für AI-Pro-Konten nicht mehr unterstützt).' });
     }
   }
+  ensureSlots();
   saveState(true);
   pump();
 }

@@ -129,7 +129,10 @@ function renderStats() {
   }
   lastCoins = g.coins;
   $('#stat-agents').textContent = `${g.agentCount ?? 0}/${g.maxAgents ?? MAX}`;
-  $('#stat-working').textContent = g.working ?? 0;
+  $('#stat-working').textContent = g.workingElsewhere ? `${g.working - g.workingElsewhere}+${g.workingElsewhere}` : (g.working ?? 0);
+  $('#stat-working').parentElement.title = g.workingElsewhere
+    ? `${g.working - g.workingElsewhere} arbeiten in diesem Büro, ${g.workingElsewhere} in anderen Projekten`
+    : 'Agents, die gerade arbeiten';
   $('#stat-quests').textContent = g.totalQuests ?? 0;
   $('#stat-morale').textContent = `${Math.round((g.morale || 1) * 100)}%`;
   renderInboxBadge(g.inboxCount);
@@ -203,8 +206,19 @@ function initFloor() {
 }
 
 function agentInSlot(slot) {
-  for (const a of S.agents.values()) if (a.slot === slot) return a;
+  for (const a of S.agents.values()) if (a.inView && a.slot === slot) return a;
   return null;
+}
+
+// Agents im aktuell angezeigten Büro (Projekt-Team + Stammpersonal), nach Platz sortiert
+function viewAgents() {
+  return [...S.agents.values()].filter((a) => a.inView).sort((x, y) => x.slot - y.slot);
+}
+
+function teamLabel(a) {
+  if (!a.projectId) return '👥 Stammpersonal';
+  const p = S.projects.find((x) => x.id === a.projectId);
+  return p ? `${p.icon} ${p.name}` : 'Projekt';
 }
 
 function renderFloor() {
@@ -282,6 +296,7 @@ function buildDesk(a) {
       <span class="slot-no"></span>
       <span class="chip prov"></span>
       <span class="chip autonomy" hidden></span>
+      <span class="chip team" hidden title="Stammpersonal – arbeitet in allen Projekten">👥</span>
       <span class="chip relay" hidden></span>
       <span class="chip shift" hidden></span>
       <span class="badge-unread" hidden>!</span>
@@ -312,6 +327,7 @@ function buildDesk(a) {
     prov: $('.chip.prov', el),
     autonomy: $('.chip.autonomy', el),
     relay: $('.chip.relay', el),
+    team: $('.chip.team', el),
     shift: $('.chip.shift', el),
     unread: $('.badge-unread', el),
     lvl: $('.scene-wrap .lvl', el),
@@ -351,6 +367,7 @@ function buildDesk(a) {
 }
 
 function updateDesk(a) {
+  if (!a.inView || a.slot == null) return;
   const d = desks[a.slot];
   if (!d?.refs || d.agentId !== a.id) return;
   const r = d.refs;
@@ -365,6 +382,7 @@ function updateDesk(a) {
   const au = AUTONOMY[a.autonomy]?.short;
   r.autonomy.hidden = !au || !a.provider.endsWith('-cli');
   r.autonomy.textContent = au || '';
+  r.team.hidden = Boolean(a.projectId) || !S.game.activeProjectId;
   const relayTo = a.relay?.toAgentId ? S.agents.get(a.relay.toAgentId) : null;
   r.relay.hidden = !relayTo;
   r.relay.textContent = relayTo ? `🔗 → ${relayTo.name}` : '';
@@ -572,7 +590,7 @@ function renderChat() {
     <form class="composer" id="composer">
       <textarea id="composer-text" placeholder="Neuer Auftrag an ${esc(a.name)}… (Strg+Enter zum Senden)"></textarea>
       <div class="composer-row">
-        <select id="composer-project" class="mini-select" title="Projekt für diesen Auftrag">${panels.projectOptions(S.game.activeProjectId, { none: '📄 Kein Projekt' })}</select>
+        <select id="composer-project" class="mini-select" title="Projekt für diesen Auftrag">${panels.projectOptions(a.projectId || S.game.activeProjectId, { none: '📄 Kein Projekt' })}</select>
         ${S.profiles.length ? `<select id="composer-profile" class="mini-select" title="Kontext-Profil für diesen Auftrag">${panels.profileOptions(null, { none: '🏢 Kein Profil', projectDefault: true })}</select>` : ''}
         <span class="hint">${a.running ? 'Arbeitet gerade – neue Aufträge landen in der Warteschlange.' : '<span class="kbd">Strg</span>+<span class="kbd">Enter</span> senden'}</span>
         <button type="button" class="btn btn-sm btn-ghost" id="btn-folder" title="Arbeitsordner öffnen">📂 Ordner</button>
@@ -643,7 +661,11 @@ function renderGear() {
     <form class="form" id="gear-form" autocomplete="off">
       <div class="row2">
         <div class="field"><label>Name</label><input name="name" value="${esc(a.name)}" maxlength="24"></div>
-        <div class="field"><label>Platz</label><select name="slot">${Array.from({ length: MAX }, (_, i) => `<option value="${i}" ${i === a.slot ? 'selected' : ''}>Schreibtisch ${i + 1}</option>`).join('')}</select></div>
+        <div class="field"><label>Zugehörigkeit</label><select name="team">
+          <option value="" ${!a.projectId ? 'selected' : ''}>👥 Stammpersonal (alle Projekte)</option>
+          ${S.projects.map((p) => `<option value="${esc(p.id)}" ${a.projectId === p.id ? 'selected' : ''}>${esc(p.icon)} Nur „${esc(p.name)}“</option>`).join('')}
+        </select></div>
+        <div class="field"><label>Platz (in diesem Büro)</label><select name="slot">${Array.from({ length: MAX }, (_, i) => `<option value="${i}" ${i === a.slot ? 'selected' : ''}>Schreibtisch ${i + 1}</option>`).join('')}</select></div>
       </div>
       <div class="field">
         <label>Aussehen</label>
@@ -690,7 +712,7 @@ function renderGear() {
       <div class="row2">
         <div class="field">
           <label>🔗 Ergebnis automatisch weitergeben an</label>
-          <select name="relayTo"><option value="">— niemanden —</option>${[...S.agents.values()].filter((x) => x.id !== a.id).sort((x, y) => x.slot - y.slot).map((x) => `<option value="${esc(x.id)}" ${a.relay?.toAgentId === x.id ? 'selected' : ''}>${esc(x.avatar)} ${esc(x.name)} (${esc(x.archetypeTitle)})</option>`).join('')}</select>
+          <select name="relayTo"><option value="">— niemanden —</option>${[...S.agents.values()].filter((x) => x.id !== a.id).sort((x, y) => (y.inView ? 1 : 0) - (x.inView ? 1 : 0) || (x.slot ?? 99) - (y.slot ?? 99)).map((x) => `<option value="${esc(x.id)}" ${a.relay?.toAgentId === x.id ? 'selected' : ''}>${esc(x.avatar)} ${esc(x.name)} (${esc(x.archetypeTitle)})${x.inView ? '' : ` · ${esc(teamLabel(x))}`}</option>`).join('')}</select>
           <div class="help">Nach jedem erfolgreichen Auftrag geht das Ergebnis automatisch an diesen Agent. So baust du Ketten wie Forscher → Texter → Kritiker (max. 6 Übergaben pro Kette).</div>
         </div>
         <div class="field">
@@ -715,6 +737,11 @@ function renderGear() {
           return `<label class="talent ${unlocked ? '' : 'locked'}"><input type="checkbox" name="talent" value="${esc(t.id)}" ${on ? 'checked' : ''} ${unlocked ? '' : 'disabled'}><span class="t-lvl">LV ${t.level}</span><span>${esc(t.icon)} <b>${esc(t.title)}</b> – ${esc(t.desc)}</span></label>`;
         }).join('')}</div>
       </div>
+      ${!a.projectId && S.projects.length ? `<div class="field gear-box">
+        <label>📁 Ergänzung zum Basis-Prompt je Projekt (Stammpersonal)</label>
+        <div class="help">Wird im jeweiligen Projekt an die Persönlichkeit unten angehängt – z. B. „Hier sachlich und in Sie-Form schreiben“. Leer = keine Ergänzung.</div>
+        ${S.projects.map((p) => `<div style="margin-top:8px"><div class="mini-label">${esc(p.icon)} ${esc(p.name)}</div><textarea name="pp_${esc(p.id)}" rows="2" placeholder="Ergänzung für ${esc(p.name)} …">${esc(a.projectPrompts?.[p.id] || '')}</textarea></div>`).join('')}
+      </div>` : ''}
       <div class="field">
         <label>Persönlichkeit & Anweisungen (System-Prompt)</label>
         <textarea name="persona" rows="7">${esc(a.persona)}</textarea>
@@ -769,6 +796,8 @@ function renderGear() {
       await api('PATCH', `/api/agents/${a.id}`, {
         name: f.get('name'),
         slot: Number(f.get('slot')),
+        projectId: f.get('team') || null,
+        ...(!a.projectId ? { projectPrompts: Object.fromEntries(S.projects.map((p) => [p.id, f.get('pp_' + p.id) || ''])) } : {}),
         avatar,
         look,
         provider: f.get('provider'),
@@ -836,14 +865,15 @@ async function retryFailed(agentId, errorId, unlock) {
 
 function openHandoff(fromId, messageId) {
   const from = S.agents.get(fromId);
-  const targets = [...S.agents.values()].filter((a) => a.id !== fromId).sort((x, y) => x.slot - y.slot);
+  const targets = [...S.agents.values()].filter((a) => a.id !== fromId)
+    .sort((x, y) => (y.inView ? 1 : 0) - (x.inView ? 1 : 0) || (x.slot ?? 99) - (y.slot ?? 99));
   if (!from) return;
   if (!targets.length) return toast('Rekrutiere zuerst einen zweiten Agent, um Ergebnisse weiterzugeben.');
   openModal(`
     <div class="modal-head"><h2>➡️ Ergebnis von ${esc(from.avatar)} ${esc(from.name)} weitergeben</h2><button class="btn btn-ghost btn-icon" data-close>✕</button></div>
     <div class="modal-body">
       <div class="field"><label>An wen?</label></div>
-      <div class="bc-list">${targets.map((a, i) => `<label class="bc-item"><input type="radio" name="handoff-to" value="${esc(a.id)}" ${i === 0 ? 'checked' : ''}><span>${esc(a.avatar)}</span><span><div class="n">${esc(a.name)}</div><div class="s">${esc(a.archetypeTitle)} · ${esc(providerShort(a))}${a.running ? ' · arbeitet' : ''}</div></span></label>`).join('')}</div>
+      <div class="bc-list">${targets.map((a, i) => `<label class="bc-item"><input type="radio" name="handoff-to" value="${esc(a.id)}" ${i === 0 ? 'checked' : ''}><span>${esc(a.avatar)}</span><span><div class="n">${esc(a.name)}</div><div class="s">${esc(a.archetypeTitle)} · ${esc(providerShort(a))}${a.inView ? '' : ` · ${esc(teamLabel(a))}`}${a.running ? ' · arbeitet' : ''}</div></span></label>`).join('')}</div>
       <div class="field"><label>Anweisung (optional)</label><textarea id="handoff-text" rows="4" placeholder="z. B. Mach aus dieser Recherche einen lockeren Blogpost."></textarea>
         <div class="help">Der Ziel-Agent bekommt deine Anweisung plus das komplette Ergebnis. +5 🪙 Übergabe-Bonus.</div></div>
     </div>
@@ -885,6 +915,8 @@ function openStore(slot = null) {
 
 function renderStore() {
   const full = (S.game.agentCount ?? 0) >= MAX;
+  const activeProject = S.projects.find((p) => p.id === S.game.activeProjectId);
+  if (S.storeTeam === undefined || (S.storeTeam && S.storeTeam !== activeProject?.id)) S.storeTeam = activeProject?.id || '';
   const provOpts = [`<option value="auto">✨ Empfohlen je Klasse (falls verfügbar)</option>`]
     .concat(providerList().map((p) => `<option value="${esc(p.id)}" ${S.storeProvider === p.id ? 'selected' : ''} ${p.available ? '' : 'disabled'}>${esc(p.label)}${p.available ? '' : ' – nicht verfügbar'}</option>`))
     .join('');
@@ -910,6 +942,10 @@ function renderStore() {
     <div class="modal-body" ${S.storeTab === 'agents' ? '' : 'hidden'}>
       <div class="store-bar">
         <div class="field"><label>Antrieb für neue Agents</label><select id="store-provider">${provOpts}</select></div>
+        <div class="field"><label>Neue Agents gehören zu</label><select id="store-team">
+          ${activeProject ? `<option value="${esc(activeProject.id)}" ${S.storeTeam === activeProject.id ? 'selected' : ''}>${esc(activeProject.icon)} Nur Projekt „${esc(activeProject.name)}“</option>` : ''}
+          <option value="" ${!S.storeTeam ? 'selected' : ''}>👥 Stammpersonal (in allen Projekten)</option>
+        </select></div>
         <div class="wallet">🪙 ${S.game.coins} · 👥 ${S.game.agentCount}/${MAX}</div>
       </div>
       ${full ? '<p style="color:var(--red)">Dein Team ist voll (10/10). Entlasse einen Agent, um Platz zu schaffen.</p>' : ''}
@@ -924,6 +960,7 @@ function renderStore() {
   if (S.storeTab === 'upgrades') panels.renderUpgrades($('#upgrade-body'));
   $('#store-provider').value = S.storeProvider;
   $('#store-provider').onchange = (e) => (S.storeProvider = e.target.value);
+  $('#store-team').onchange = (e) => (S.storeTeam = e.target.value);
   $('#modal-card').querySelectorAll('[data-hire]').forEach((b) => (b.onclick = async () => {
     b.disabled = true;
     try {
@@ -931,6 +968,7 @@ function renderStore() {
         archetypeId: b.dataset.hire,
         provider: S.storeProvider === 'auto' ? undefined : S.storeProvider,
         slot: S.storeSlot ?? undefined,
+        projectId: $('#store-team').value || null,
       });
       closeModal();
       setTimeout(() => {
@@ -946,7 +984,7 @@ function renderStore() {
 
 // Massenauftrag
 function openBroadcast() {
-  const list = [...S.agents.values()].sort((x, y) => x.slot - y.slot);
+  const list = viewAgents();
   if (!list.length) return toast('Rekrutiere zuerst ein paar Agents im Store.');
   openModal(`
     <div class="modal-head"><h2>📢 Massenauftrag</h2><button class="btn btn-ghost btn-icon" data-close>✕</button></div>
@@ -1049,7 +1087,9 @@ function openSettings() {
 function upsertAgent(a) {
   const old = S.agents.get(a.id);
   S.agents.set(a.id, a);
-  if (old && old.slot !== a.slot) { renderFloor(); return; }
+  if (!a.inView && S.openId === a.id) closeDrawer(); // Agent ist in ein anderes Projekt gewechselt
+  if (old && (old.slot !== a.slot || old.inView !== a.inView)) { renderFloor(); return; }
+  if (!a.inView) return;
   if (!old || desks[a.slot]?.agentId !== a.id) renderFloor();
   else updateDesk(a);
 }
@@ -1100,6 +1140,7 @@ function connect() {
     updateDesk(a);
     if (S.openId === id && $('#live-activity')) $('#live-activity').textContent = text;
   });
+  on('team', () => loadState());
   on('game', (g) => {
     const upgradesChanged = (S.game.upgrades || []).length !== (g.upgrades || []).length;
     S.game = g;

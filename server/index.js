@@ -136,15 +136,34 @@ const emitProjects = () => emit('projects', projects.listProjects());
 route('GET', '/api/projects', () => projects.listProjects());
 route('POST', '/api/projects', (_, body) => {
   const p = projects.createProject(body);
+  agents.ensureSlots(); // Stammpersonal bekommt Plätze im neuen Büro
   if (body.activate) projects.setActiveProject(p.id);
   progress.checkAchievements();
   emitProjects();
   emit('game', agents.gameInfo());
+  if (body.activate) emit('team', agents.teamInfo());
   return projects.publicProject(p);
 });
 route('PATCH', '/api/projects/:id', ({ id }, body) => { const p = projects.updateProject(id, body); emitProjects(); return projects.publicProject(p); });
-route('DELETE', '/api/projects/:id', ({ id }) => { projects.deleteProject(id); emitProjects(); emit('game', agents.gameInfo()); return { ok: true }; });
-route('PUT', '/api/active-project', (_, body) => { projects.setActiveProject(body.projectId || null); emit('game', agents.gameInfo()); return { ok: true }; });
+route('DELETE', '/api/projects/:id', ({ id }) => {
+  const team = state.agents.filter((a) => a.projectId === id);
+  if (team.length) {
+    throw Object.assign(new Error(`Das Projekt hat noch ${team.length} eigene Agents (${team.map((a) => a.name).join(', ')}). Entlasse sie oder mach sie zu Stammpersonal.`), { status: 400 });
+  }
+  const wasActive = state.activeProjectId === id;
+  projects.deleteProject(id);
+  agents.ensureSlots();
+  emitProjects();
+  emit('game', agents.gameInfo());
+  if (wasActive) emit('team', agents.teamInfo());
+  return { ok: true };
+});
+route('PUT', '/api/active-project', (_, body) => {
+  projects.setActiveProject(body.projectId || null);
+  emit('game', agents.gameInfo());
+  emit('team', agents.teamInfo()); // Büro wechselt → Oberfläche lädt Agents neu
+  return { ok: true };
+});
 route('POST', '/api/projects/:id/open-folder', ({ id }) => {
   const p = projects.findProject(id);
   if (!p) throw notFound('Projekt nicht gefunden');

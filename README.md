@@ -116,6 +116,21 @@ Auf dem Schreibtisch zeigt **🗓️ 08:00** die nächste Schicht, an der Pixel-
 der Uhrzeit. Läuft, solange der Agent Store geöffnet ist; verpasste Schichten des laufenden Tages werden beim Start
 nachgeholt. **▶** startet eine Schicht sofort. Das Pixel-Büro wird abends (20–7 Uhr) dunkel, tagsüber scheint die Sonne.
 
+### 👥 Teams pro Projekt & Stammpersonal
+
+- **Jedes Projekt hat sein eigenes Büro mit 10 Plätzen.** Wechselst du oben das aktive Projekt, wechselt das Büro mit.
+  Dazu gibt es das Büro „Kein Projekt“.
+- **Projekt-Agents** gehören zu genau einem Projekt – mit eigenem Basis-Prompt (Persönlichkeit), eigener Autonomie usw.
+  Ihre Aufträge laufen automatisch in ihrem Projekt.
+- **👥 Stammpersonal** sitzt in jedem Büro (z. B. dein erfahrener Kritiker). Für Stammpersonal kannst du in der
+  ⚙️ Ausrüstung **pro Projekt eine Ergänzung zum Basis-Prompt** hinterlegen („Hier sachlich und in Sie-Form“).
+- Im **🛒 Store** wählst du, ob ein neuer Agent nur zum aktiven Projekt oder zum Stammpersonal gehört; in der
+  Ausrüstung lässt sich die **Zugehörigkeit** jederzeit ändern (wenn im Ziel-Büro Platz ist).
+- Agents anderer Projekte arbeiten im Hintergrund weiter (Schichten, Planer, Ketten). Die ⚡-Anzeige zeigt dann
+  z. B. „1+2“ = 1 in diesem Büro, 2 in anderen Projekten. Höchstens 10 arbeiten gleichzeitig (schont deine Abo-Limits).
+- Ein Projekt mit eigenem Team lässt sich erst löschen, wenn seine Agents entlassen oder zu Stammpersonal gemacht sind.
+- Bestehende Agents aus der Zeit vor den Teams sind automatisch Stammpersonal.
+
 ### 📁 Projekte & Ergebnis-Archiv
 
 - Oben in der Leiste wählst du das **aktive Projekt** – alle neuen Aufträge (Schreibtisch, Detailansicht, Quests,

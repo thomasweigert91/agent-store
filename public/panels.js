@@ -12,8 +12,16 @@ export function initPanels(ctx) {
 const $ = (sel, root = document) => root.querySelector(sel);
 const DAYS = [[1, 'Mo'], [2, 'Di'], [3, 'Mi'], [4, 'Do'], [5, 'Fr'], [6, 'Sa'], [0, 'So']];
 
+// Agents des aktuellen Büros zuerst (nach Platz), danach die Teams anderer Projekte.
 function agentsSorted() {
-  return [...C.S.agents.values()].sort((a, b) => a.slot - b.slot);
+  return [...C.S.agents.values()].sort((a, b) => (b.inView ? 1 : 0) - (a.inView ? 1 : 0) || (a.slot ?? 99) - (b.slot ?? 99) || a.name.localeCompare(b.name));
+}
+
+function teamSuffix(a) {
+  if (!a.projectId) return C.S.game.activeProjectId ? ' · 👥 Stamm' : '';
+  if (a.inView) return '';
+  const p = C.S.projects.find((x) => x.id === a.projectId);
+  return p ? ` · ${p.icon} ${p.name}` : '';
 }
 
 export function projectOptions(selected, { none = 'Kein Projekt' } = {}) {
@@ -30,8 +38,8 @@ export function projectLabel(id) {
 
 function agentOptions(selected, preferArchetype) {
   const list = agentsSorted();
-  const pick = selected || list.find((a) => a.archetype === preferArchetype)?.id || list[0]?.id;
-  return list.map((a) => `<option value="${C.esc(a.id)}" ${a.id === pick ? 'selected' : ''}>${C.esc(a.avatar)} ${C.esc(a.name)} (${C.esc(a.archetypeTitle)})</option>`).join('');
+  const pick = selected || list.find((a) => a.inView && a.archetype === preferArchetype)?.id || list.find((a) => a.archetype === preferArchetype)?.id || list[0]?.id;
+  return list.map((a) => `<option value="${C.esc(a.id)}" ${a.id === pick ? 'selected' : ''}>${C.esc(a.avatar)} ${C.esc(a.name)} (${C.esc(a.archetypeTitle)})${C.esc(teamSuffix(a))}</option>`).join('');
 }
 
 function needAgents() {
