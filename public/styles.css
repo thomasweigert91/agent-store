@@ -555,6 +555,7 @@ main { position: relative; z-index: 1; flex: 1; padding: 22px; }
 .msg.handoff summary { cursor: pointer; font-size: 12px; color: var(--muted); }
 .handoff-result { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line2); font-size: 13px; }
 .handoff-btn { color: var(--green); }
+.retry-btn { color: var(--gold); margin-left: 6px; }
 
 /* ================================================================ Projekte, Quests, Schichten, Progression */
 .stat.morale b { color: var(--green); }

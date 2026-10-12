@@ -522,7 +522,12 @@ function messageHtml(m) {
       + projectChip(meta.projectId);
     return `<div class="msg assistant" data-mid="${esc(m.id)}"><div class="bubble">${renderMarkdown(m.text)}</div><div class="meta">${bits.join(' · ')} ${reward}<button class="copy-msg" data-copy-mid="${esc(m.id)}">📋 kopieren</button><button class="copy-msg handoff-btn" data-handoff-mid="${esc(m.id)}">➡️ Weitergeben an …</button></div></div>`;
   }
-  if (m.role === 'error') return `<div class="msg error"><div class="bubble">❌ ${esc(m.text)}</div><div class="meta">${fmtTime(m.ts)}</div></div>`;
+  if (m.role === 'error') {
+    const denied = /Verweigert:|permission/i.test(m.text);
+    return `<div class="msg error"><div class="bubble">❌ ${esc(m.text)}</div><div class="meta">${fmtTime(m.ts)}
+      <button class="copy-msg retry-btn" data-retry-mid="${esc(m.id)}">🔁 Erneut versuchen</button>
+      ${denied ? `<button class="copy-msg retry-btn" data-retry-mid="${esc(m.id)}" data-unlock="1" title="Setzt die Autonomie auf „Volle Kontrolle“ (auch Shell-Befehle)">🔓 Befehle erlauben & erneut</button>` : ''}</div></div>`;
+  }
   return `<div class="msg system"><div class="bubble">${esc(m.text)}</div></div>`;
 }
 
@@ -778,6 +783,8 @@ $('#drawer').addEventListener('click', async (e) => {
     setTimeout(() => (codeBtn.textContent = 'kopieren'), 1200);
     return;
   }
+  const retryBtn = e.target.closest('[data-retry-mid]');
+  if (retryBtn) return retryFailed(S.openId, retryBtn.dataset.retryMid, retryBtn.dataset.unlock === '1');
   const handoffBtn = e.target.closest('[data-handoff-mid]');
   if (handoffBtn) return openHandoff(S.openId, handoffBtn.dataset.handoffMid);
   const msgBtn = e.target.closest('[data-copy-mid]');
@@ -792,6 +799,23 @@ $('#drawer').addEventListener('click', async (e) => {
 });
 
 // ---------------------------------------------------------------- Übergabe an anderen Agent
+// Fehlgeschlagenen Auftrag erneut einreihen (optional mit voller Autonomie).
+async function retryFailed(agentId, errorId, unlock) {
+  const a = S.agents.get(agentId);
+  const msgs = S.detail?.messages || [];
+  const idx = msgs.findIndex((m) => m.id === errorId);
+  const task = msgs.slice(0, idx).reverse().find((m) => m.role === 'user');
+  if (!a || !task) return toast('Kein Auftrag zum Wiederholen gefunden.', 'error');
+  try {
+    if (unlock) {
+      if (!confirm(`${a.name} auf „Volle Kontrolle“ setzen? Der Agent darf dann auch Terminal-Befehle in seinem Arbeitsordner ausführen.`)) return;
+      await api('PATCH', `/api/agents/${a.id}`, { autonomy: 'full' });
+    }
+    await api('POST', `/api/agents/${a.id}/tasks`, { prompt: task.text, projectId: task.meta?.projectId ?? null });
+    toast(unlock ? '🔓 Befehle erlaubt – Auftrag läuft erneut' : '🔁 Auftrag läuft erneut');
+  } catch (err) { toast(err.message, 'error'); }
+}
+
 function openHandoff(fromId, messageId) {
   const from = S.agents.get(fromId);
   const targets = [...S.agents.values()].filter((a) => a.id !== fromId).sort((x, y) => x.slot - y.slot);

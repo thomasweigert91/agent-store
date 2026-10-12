@@ -69,9 +69,9 @@ export async function run({ agent, prompt, persona, cwd, signal, onEvent, extraD
   if (!agyPath) await detect();
   if (!agyPath) throw new Error('Antigravity CLI (agy) ist nicht installiert.');
 
-  const attempt = async (conversationId) => {
+  const attempt = async (conversationId, followUp = null) => {
     // Rolle nur beim ersten Auftrag einer Unterhaltung mitschicken – danach kennt agy sie.
-    let text = conversationId || !persona ? prompt : `# Deine Rolle\n${persona}\n\n# Auftrag\n${prompt}`;
+    let text = followUp || conversationId || !persona ? (followUp || prompt) : `# Deine Rolle\n${persona}\n\n# Auftrag\n${prompt}`;
     if (text.length > MAX_ARG_CHARS) {
       const dir = path.join(cwd, '.agent-store');
       fs.mkdirSync(dir, { recursive: true });
@@ -138,7 +138,18 @@ export async function run({ agent, prompt, persona, cwd, signal, onEvent, extraD
     if (/auth|login|sign in|credential/i.test(reason)) reason += '\n\n👉 Tipp: Starte antigravity-login.bat und melde dich mit deinem Google-AI-Pro-Konto an.';
     const err = new Error(String(reason).slice(0, 2000));
     err.sessionMissing = Boolean(conversationId) && /conversation|not found/i.test(String(reason));
+    // Ein Werkzeug wurde verweigert und es kam keine Antwort → in derselben Unterhaltung nachfassen.
+    err.deniedEmpty = denied.length > 0 && !finalText && !followUp;
+    err.conversationId = result?.conversation_id || newConversation;
+    err.denied = denied;
     throw err;
+  };
+
+  const retryWithoutTools = (err) => {
+    onEvent({ type: 'activity', text: '♻️ Befehl verweigert – neuer Anlauf ohne Befehle' });
+    return attempt(err.conversationId, `Hinweis: ${err.denied.join(', ')} ist für dich in diesem Modus gesperrt – versuche es nicht erneut. `
+      + 'Erledige den Auftrag ohne Terminal-Befehle: nutze deine Such- und Lese-Werkzeuge oder dein Wissen '
+      + 'und antworte jetzt direkt mit dem vollständigen Ergebnis. Kennzeichne, falls du etwas nicht prüfen konntest.');
   };
 
   try {
@@ -146,8 +157,14 @@ export async function run({ agent, prompt, persona, cwd, signal, onEvent, extraD
   } catch (err) {
     if (err.sessionMissing) {
       onEvent({ type: 'activity', text: '♻️ Alte Unterhaltung nicht gefunden – starte neu' });
-      return attempt(null);
+      try {
+        return await attempt(null);
+      } catch (err2) {
+        if (err2.deniedEmpty && err2.conversationId) return retryWithoutTools(err2);
+        throw err2;
+      }
     }
+    if (err.deniedEmpty && err.conversationId) return retryWithoutTools(err);
     throw err;
   }
 }
