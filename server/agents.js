@@ -112,6 +112,7 @@ export function publicAgent(agent, { withMessages = false } = {}) {
     ...agent,
     level,
     levelTitle: levelTitle(level),
+    archetypeBlurb: CATALOG.find((c) => c.id === agent.archetype)?.blurb ?? '',
     xpFrom: bounds.from,
     xpTo: bounds.to,
     running: running.has(agent.id),

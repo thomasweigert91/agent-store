@@ -250,7 +250,8 @@ function buildEmptyDesk(slot) {
     <div class="scene-wrap"><canvas class="scene"></canvas><span class="plus">＋</span></div>
     <div class="who">
       <div class="name">Platz ${slot + 1}</div>
-      <div class="cls">Noch niemand angestellt</div>
+      <div class="role-row"><span class="cls">Noch niemand angestellt</span></div>
+      <div class="purpose">&nbsp;</div>
       <div class="xp"><div class="xp-fill"></div></div>
     </div>
     <div class="statusbar">
@@ -304,7 +305,8 @@ function buildDesk(a) {
     <div class="scene-wrap"><canvas class="scene"></canvas><span class="lvl"></span><span class="sym"></span></div>
     <div class="who">
       <div class="name"></div>
-      <div class="cls"></div>
+      <div class="role-row"><span class="role"></span><span class="cls"></span></div>
+      <div class="purpose"></div>
       <div class="xp"><div class="xp-fill"></div></div>
     </div>
     <div class="statusbar">
@@ -334,6 +336,8 @@ function buildDesk(a) {
     sym: $('.scene-wrap .sym', el),
     name: $('.name', el),
     cls: $('.cls', el),
+    role: $('.role', el),
+    purpose: $('.purpose', el),
     xpFill: $('.xp-fill', el),
     stateLabel: $('.state-label', el),
     detail: $('.detail', el),
@@ -402,7 +406,11 @@ function updateDesk(a) {
   r.lvl.textContent = `LV ${a.level}`;
   r.sym.textContent = a.avatar;
   r.name.textContent = a.name;
-  r.cls.textContent = `${a.archetypeTitle} · ${a.levelTitle} · ${a.questsDone} ✔`;
+  r.role.textContent = `${a.avatar} ${a.archetypeTitle}`;
+  r.cls.textContent = `${a.levelTitle} · ${a.questsDone} ✔`;
+  const purpose = a.archetypeBlurb || '';
+  r.purpose.textContent = purpose;
+  r.purpose.title = a.archetypeBlurb || '';
   const pct = Math.round(((a.xp - a.xpFrom) / Math.max(1, a.xpTo - a.xpFrom)) * 100);
   r.xpFill.style.width = `${Math.min(100, Math.max(0, pct))}%`;
   r.xpFill.parentElement.title = `${a.xp} / ${a.xpTo} XP bis Level ${a.level + 1}`;
