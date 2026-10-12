@@ -237,7 +237,7 @@ export function updateAgent(id, patch) {
   if (!agent) throw fail(404, 'Agent nicht gefunden.');
   if (typeof patch.name === 'string' && patch.name.trim()) agent.name = patch.name.trim().slice(0, 24);
   if (typeof patch.avatar === 'string' && patch.avatar.trim()) agent.avatar = patch.avatar.trim().slice(0, 8);
-  if (typeof patch.persona === 'string') agent.persona = patch.persona.slice(0, 8000);
+  if (typeof patch.persona === 'string') agent.persona = patch.persona.slice(0, 20000);
   if (patch.look && typeof patch.look === 'object') {
     const idx = (v) => (Number.isInteger(v) && v >= 0 && v < 16 ? v : 0);
     agent.look = { hair: idx(patch.look.hair), hairColor: idx(patch.look.hairColor), skin: idx(patch.look.skin), acc: idx(patch.look.acc) };
@@ -298,7 +298,7 @@ export function updateAgent(id, patch) {
   if (patch.projectPrompts && typeof patch.projectPrompts === 'object') {
     agent.projectPrompts = {};
     for (const [pid, text] of Object.entries(patch.projectPrompts)) {
-      const t = String(text || '').trim().slice(0, 4000);
+      const t = String(text || '').trim().slice(0, 8000);
       if (t && state.projects.some((p) => p.id === pid)) agent.projectPrompts[pid] = t;
     }
   }
