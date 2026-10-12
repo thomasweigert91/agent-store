@@ -174,7 +174,7 @@ Agents können ihre Ergebnisse an andere Agents weitergeben:
 - **Automatisch (Kette):** In der **⚙️ Ausrüstung** unter „🔗 Ergebnis automatisch weitergeben an“ einen Ziel-Agent und
   eine Standardanweisung setzen. Nach jedem *erfolgreichen* Auftrag geht das Ergebnis selbstständig weiter, z. B.
   Forscher → Texter → Kritiker. Auf dem Schreibtisch zeigt „🔗 → Name“ die Verbindung, der Ticker meldet jede Übergabe.
-- **Schutz:** Bei Fehler oder Abbruch wird nicht weitergegeben. Eine Kette stoppt nach **6 Übergaben**, auch wenn sie
+- **Schutz:** Bei Fehler oder Abbruch wird nicht weitergegeben. Eine Kette stoppt nach **14 Übergaben** (Überarbeitungsrunden des Prüfers zählen mit), auch wenn sie
   im Kreis läuft. Wird ein Ziel-Agent entlassen, wird die Verbindung automatisch entfernt.
 - **Bonus:** +5 🪙 pro Übergabe.
 

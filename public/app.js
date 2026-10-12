@@ -721,7 +721,7 @@ function renderGear() {
         <div class="field">
           <label>🔗 Ergebnis automatisch weitergeben an</label>
           <select name="relayTo"><option value="">— niemanden —</option>${[...S.agents.values()].filter((x) => x.id !== a.id).sort((x, y) => (y.inView ? 1 : 0) - (x.inView ? 1 : 0) || (x.slot ?? 99) - (y.slot ?? 99)).map((x) => `<option value="${esc(x.id)}" ${a.relay?.toAgentId === x.id ? 'selected' : ''}>${esc(x.avatar)} ${esc(x.name)} (${esc(x.archetypeTitle)})${x.inView ? '' : ` · ${esc(teamLabel(x))}`}</option>`).join('')}</select>
-          <div class="help">Nach jedem erfolgreichen Auftrag geht das Ergebnis automatisch an diesen Agent. So baust du Ketten wie Forscher → Texter → Kritiker (max. 6 Übergaben pro Kette).</div>
+          <div class="help">Nach jedem erfolgreichen Auftrag geht das Ergebnis automatisch an diesen Agent. So baust du Ketten wie Forscher → Texter → Kritiker (max. 14 Übergaben pro Kette, Prüfrunden zählen mit).</div>
         </div>
         <div class="field">
           <label>Anweisung für die Weitergabe</label>
