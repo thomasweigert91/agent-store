@@ -10,6 +10,8 @@ import * as archive from './archive.js';
 import { findProject, projectFolder, projectPreamble, saveResultFile } from './projects.js';
 import { personaWithTalents, activeTalents, moraleFactor, bump, checkAchievements, TALENTS } from './progress.js';
 import { nextShiftFor, removeAgentSchedules } from './scheduler.js';
+import { findProfile, profilePreamble, resolveProfileId } from './profiles.js';
+import { linkResult, clearPending as clearPlanPending, removeAgent as removePlanAgent } from './planner.js';
 
 export const MAX_AGENTS = 10;
 const MAX_MESSAGES = 300;
@@ -90,6 +92,7 @@ export function gameInfo() {
     totalCoinsEarned: state.totalCoinsEarned,
     agentCount: state.agents.length,
     working: running.size,
+    inboxCount: archive.countOpen() + state.agents.filter((a) => a.pendingRelay).length,
     maxAgents: MAX_AGENTS,
   };
 }
@@ -235,6 +238,7 @@ export function dismiss(id) {
   state.agents = state.agents.filter((a) => a.id !== id);
   live.delete(id);
   removeAgentSchedules(id);
+  removePlanAgent(id);
   // Ketten, die auf den entlassenen Agent zeigen, auflösen.
   for (const other of state.agents) {
     if (other.relay?.toAgentId === id) {
@@ -256,12 +260,17 @@ export function enqueue(id, prompt, opts = {}) {
   if (!text) throw fail(400, 'Leerer Auftrag.');
   if (text.length > 100000) throw fail(400, 'Auftrag ist zu lang (max. 100.000 Zeichen).');
   const projectId = opts.projectId !== undefined ? opts.projectId : state.activeProjectId;
+  const project = findProject(projectId);
   agent.queue.push({
     id: uid(),
     prompt: text,
     ts: Date.now(),
-    projectId: findProject(projectId) ? projectId : null,
+    projectId: project ? projectId : null,
+    profileId: resolveProfileId(opts.profileId, project),
     source: opts.source || 'manual',
+    ...(opts.planItemId ? { planItemId: opts.planItemId } : {}),
+    ...(opts.structure?.length ? { structure: opts.structure } : {}),
+    ...(opts.limits ? { limits: opts.limits } : {}),
     ...(opts.scheduleTitle ? { scheduleTitle: opts.scheduleTitle } : {}),
     ...(opts.templateTitle ? { templateTitle: opts.templateTitle } : {}),
   });
@@ -276,7 +285,7 @@ export function enqueue(id, prompt, opts = {}) {
  * chainId/step werden bei Ketten mitgeführt, round/returnTo bei Prüfer-Runden.
  * Mit `text` kann statt einer Nachricht ein beliebiger Text übergeben werden.
  */
-export function handoff(fromId, { toAgentId, messageId, text, instruction, chainId, step = 1, round, returnTo, projectId } = {}) {
+export function handoff(fromId, { toAgentId, messageId, text, instruction, chainId, step = 1, round, returnTo, projectId, profileId } = {}) {
   const from = findAgent(fromId);
   if (!from) throw fail(404, 'Agent nicht gefunden.');
   const to = findAgent(toAgentId);
@@ -301,6 +310,7 @@ export function handoff(fromId, { toAgentId, messageId, text, instruction, chain
     chainId: chainId || uid(),
     step,
     projectId: findProject(pid) ? pid : null,
+    profileId: (() => { const p = profileId !== undefined ? profileId : msg?.meta?.profileId ?? null; return findProfile(p) ? p : null; })(),
     source: 'handoff',
     ...(round ? { round } : {}),
     ...(returnTo ? { returnTo } : {}),
@@ -416,12 +426,14 @@ async function execute(agent) {
 
   const history = agent.messages.slice();
   const project = findProject(task.projectId);
+  const profile = findProfile(task.profileId);
   const reviewMode = Boolean(agent.review?.enabled && task.from);
   addMessage(agent, {
     role: 'user',
     text: task.prompt,
     meta: {
       projectId: project?.id || null,
+      profileId: profile?.id || null,
       source: task.source,
       scheduleTitle: task.scheduleTitle,
       templateTitle: task.templateTitle,
@@ -455,7 +467,7 @@ async function execute(agent) {
     if (!provider) throw new Error('Unbekannter Provider: ' + agent.provider);
     const result = await provider.run({
       agent,
-      prompt: (project ? projectPreamble(project) : '') + task.prompt + (reviewMode ? REVIEW_SUFFIX : ''),
+      prompt: (project ? projectPreamble(project) : '') + (profile ? profilePreamble(profile) : '') + task.prompt + (reviewMode ? REVIEW_SUFFIX : ''),
       persona: personaWithTalents(agent),
       history,
       cwd: agentCwd(agent),
@@ -475,6 +487,7 @@ async function execute(agent) {
       meta: {
         provider: agent.provider, model: agent.model, durationMs, costUsd: result.costUsd, tools: l.tools,
         coins: r.coins, xp: r.xp, projectId: project?.id || null, chainId: task.chainId || null,
+        profileId: profile?.id || null, structure: task.structure || null, planItemId: task.planItemId || null,
         ...(reviewMode ? { score, minScore: agent.review.minScore, round: task.round || 1 } : {}),
       },
     });
@@ -494,6 +507,7 @@ async function execute(agent) {
     else relayResult(agent, task, msg);
     checkAchievements();
   } catch (err) {
+    if (task.planItemId) clearPlanPending(task.planItemId);
     if (err.aborted || ac.signal.aborted) {
       addMessage(agent, { role: 'system', text: '⏹️ Auftrag abgebrochen.', meta: { partial: l.partial.slice(-PREVIEW_CHARS) } });
       agent.status = agent.unread ? 'done' : 'idle';
@@ -544,8 +558,14 @@ function archiveResult(agent, task, msg, project, durationMs, costUsd, score) {
     score,
     chainId: task.chainId || null,
     source: task.source || 'manual',
+    profileId: task.profileId || null,
+    structure: task.structure || null,
+    limits: task.limits || null,
+    planItemId: task.planItemId || null,
+    status: 'offen',
   });
   if (project) saveResultFile(project, entry);
+  if (task.planItemId) linkResult(task.planItemId, entry.id);
 }
 
 // Automatische Weitergabe nach erfolgreichem Auftrag (nur bei Erfolg, nie bei Fehler/Abbruch).
@@ -570,6 +590,7 @@ function relayResult(agent, task, msg, override = {}) {
     chainId: task.chainId || uid(),
     step,
     projectId: task.projectId ?? null,
+    profileId: task.profileId ?? null,
     messageId: msg.id,
     ...(override.text ? { text: override.text } : {}),
   };
@@ -609,6 +630,7 @@ function handleReview(agent, task, msg, score) {
   }
   if (round >= maxRounds || !sender) {
     addMessage(agent, { role: 'system', text: `⚠️ Ziel ${minScore}/10 nach ${round} Runde(n) nicht erreicht (zuletzt ${score}/10) – bitte selbst entscheiden.` });
+    archive.updateEntry(msg.id, { escalated: true });
     emit('toast', { kind: 'error', text: `🧐 ${agent.name}: Ziel nicht erreicht (${score}/10) – deine Entscheidung ist gefragt.` });
     if (task.chainId) bump('chains');
     return;
@@ -623,6 +645,7 @@ function handleReview(agent, task, msg, score) {
     round: round + 1,
     returnTo: agent.id,
     projectId: task.projectId ?? null,
+    profileId: task.profileId ?? null,
   });
 }
 
@@ -638,6 +661,7 @@ function returnRevision(agent, task, msg) {
     step: (task.step || 0) + 1,
     round: task.round,
     projectId: task.projectId ?? null,
+    profileId: task.profileId ?? null,
   });
   return true;
 }

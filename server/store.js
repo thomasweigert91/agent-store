@@ -20,13 +20,14 @@ function defaultState() {
   return {
     version: 1, coins: START_COINS, totalQuests: 0, totalCoinsEarned: 0, agents: [], createdAt: Date.now(),
     projects: [], activeProjectId: null, templates: [], schedules: [], upgrades: [], achievements: {}, stats: {},
+    profiles: [], planItems: [],
   };
 }
 
 // Ältere Spielstände um neue Felder ergänzen.
 function normalizeState(s) {
   const d = defaultState();
-  for (const key of ['projects', 'templates', 'schedules', 'upgrades', 'achievements', 'stats']) {
+  for (const key of ['projects', 'templates', 'schedules', 'upgrades', 'achievements', 'stats', 'profiles', 'planItems']) {
     if (!s[key] || typeof s[key] !== 'object') s[key] = d[key];
   }
   if (s.activeProjectId === undefined) s.activeProjectId = null;

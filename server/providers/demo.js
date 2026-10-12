@@ -24,8 +24,29 @@ export async function run({ agent, prompt, signal, onEvent }) {
     onEvent({ type: 'activity', text: s });
     await sleep(500 + Math.random() * 900, signal);
   }
-  const task = prompt.replace(/^\[Projekt[\s\S]*?\n\n/, '');
+  const task = prompt.replace(/^\[Projekt[\s\S]*?\n\n/, '').replace(/^\[Kontext-Profil[\s\S]*?\n\n/, '');
   const topic = task.replace(/\s+/g, ' ').trim().slice(0, 80);
+  const structured = prompt.match(/Gliedere deine Antwort GENAU in diese Abschnitte[\s\S]*?darunter:\s*(.+)$/m);
+  if (structured && !/NOTE: <0-10>\/10/.test(prompt)) {
+    // Vorlagen mit Ausgabestruktur: zu jedem Abschnitt passenden Demo-Inhalt liefern.
+    const names = [...structured[1].matchAll(/([A-ZÄÖÜ0-9][A-ZÄÖÜ0-9 \-]*?):/g)].map((m) => m[1].trim());
+    const theme = task.split('\n')[0].replace(/^Wandle das Ausgangsmaterial.*?Format um:\s*/, '').slice(0, 70);
+    const sample = (name) => {
+      if (/HASHTAG/.test(name)) return '#demo #agentstore #ideen #kreativ #selbststaendig';
+      if (/^TAGS$/.test(name)) return Array.from({ length: 13 }, (_, i) => `tag${i + 1}`).join(', ');
+      if (/BILD/.test(name)) return 'Helles Flatlay auf Holztisch, natürliches Licht, warme Farben, viel Weißraum für Text.';
+      if (/FOLIEN|SKRIPT|PERSONAS|TRENDS|NAMEN/.test(name)) return '1. Erster Punkt\n2. Zweiter Punkt\n3. Dritter Punkt';
+      if (/BETREFF|TITEL|HOOK/.test(name)) return `Demo: ${theme.slice(0, 50)}`;
+      return `Simulierter Inhalt für „${name}“ zu: ${theme}. Wechsle auf Claude oder Gemini für echte Texte.`;
+    };
+    const text = names.map((n) => `${n}:\n${sample(n)}`).join('\n\n');
+    onEvent({ type: 'activity', text: '✍️ schreibt…' });
+    for (const word of text.split(/(\s+)/)) {
+      onEvent({ type: 'delta', text: word });
+      await sleep(5 + Math.random() * 15, signal);
+    }
+    return { text };
+  }
   if (/NOTE: <0-10>\/10/.test(prompt)) {
     // Prüfer-Modus: erste Fassung durchwachsen, Überarbeitungen besser.
     const revised = /Runde [2-5]/.test(prompt);

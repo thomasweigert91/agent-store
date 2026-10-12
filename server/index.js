@@ -13,6 +13,12 @@ import * as projects from './projects.js';
 import * as templates from './templates.js';
 import * as scheduler from './scheduler.js';
 import * as progress from './progress.js';
+import * as profiles from './profiles.js';
+import * as planner from './planner.js';
+import * as inbox from './inbox.js';
+
+// Profil-Auswahl aus Anfragen: fehlt = Standard des Projekts, leer = kein Profil, sonst ID.
+const profileOpt = (v) => (v === undefined ? undefined : v || 'none');
 
 const PORT = Number(process.env.PORT) || 4777;
 const HOST = '127.0.0.1';
@@ -78,6 +84,9 @@ function fullState() {
     limits: agents.limitsCache.value,
     projects: projects.listProjects(),
     projectIcons: projects.PROJECT_ICONS,
+    profiles: profiles.listProfiles(),
+    templateCategories: templates.CATEGORIES,
+    planTypes: planner.PLAN_TYPES,
     upgradeCatalog: progress.UPGRADES,
     talentCatalog: progress.TALENTS,
   };
@@ -153,6 +162,12 @@ route('GET', '/api/archive', (_, __, url) => archive.query({
   limit: Math.min(5000, Number(url.searchParams.get('limit')) || 200),
 }));
 
+route('GET', '/api/archive/:id', ({ id }) => {
+  const e = archive.find(id);
+  if (!e) throw notFound('Ergebnis nicht gefunden');
+  return e;
+});
+
 // --- Quest-Board
 route('GET', '/api/templates', () => templates.listTemplates());
 route('POST', '/api/templates', (_, body) => templates.createTemplate(body));
@@ -162,12 +177,106 @@ route('POST', '/api/templates/:id/run', ({ id }, body) => {
   if (!t) throw notFound('Vorlage nicht gefunden');
   const agent = agents.enqueue(body.agentId, templates.fillTemplate(t, body.values), {
     projectId: body.projectId === undefined ? undefined : body.projectId || null,
+    profileId: profileOpt(body.profileId),
     source: 'template',
     templateTitle: t.title,
+    structure: t.structure,
+    limits: t.limits,
   });
   progress.bump('templateRuns');
   progress.checkAchievements();
   return agents.publicAgent(agent);
+});
+
+route('GET', '/api/templates/export', (_, __, url) => {
+  const cat = url.searchParams.get('category') || '';
+  return { __raw: { type: 'application/json; charset=utf-8', filename: `agent-store-vorlagen${cat ? '-' + cat : ''}.json`, body: JSON.stringify(templates.exportTemplates(cat), null, 2) } };
+});
+route('POST', '/api/templates/import', (_, body) => templates.importTemplates(body));
+
+// --- Kontext-Profile
+const emitProfiles = () => emit('profiles', profiles.listProfiles());
+route('GET', '/api/profiles', () => profiles.listProfiles());
+route('POST', '/api/profiles', (_, body) => { const p = profiles.createProfile(body); emitProfiles(); return p; });
+route('PATCH', '/api/profiles/:id', ({ id }, body) => { const p = profiles.updateProfile(id, body); emitProfiles(); return p; });
+route('DELETE', '/api/profiles/:id', ({ id }) => {
+  profiles.deleteProfile(id);
+  archive.clearProfile(id);
+  emitProfiles();
+  emit('projects', projects.listProjects());
+  return { ok: true };
+});
+
+// --- Planer
+const emitPlan = () => emit('plan', {});
+route('GET', '/api/plan', (_, __, url) => planner.listPlanItems({ from: url.searchParams.get('from') || '', to: url.searchParams.get('to') || '' }));
+route('POST', '/api/plan', (_, body) => { const it = planner.createPlanItem(body); emitPlan(); return it; });
+route('POST', '/api/plan/bulk', (_, body) => { const items = planner.planMany(body); emitPlan(); return { created: items.length, items }; });
+route('PATCH', '/api/plan/:id', ({ id }, body) => { const it = planner.updatePlanItem(id, body); emitPlan(); return it; });
+route('DELETE', '/api/plan/:id', ({ id }) => { planner.deletePlanItem(id); emitPlan(); return { ok: true }; });
+route('POST', '/api/plan/:id/generate', ({ id }, body) => {
+  const it = planner.findPlanItem(id);
+  if (!it) throw notFound('Eintrag nicht gefunden');
+  const agentId = body.agentId || it.agentId;
+  if (!agents.findAgent(agentId)) throw Object.assign(new Error('Bitte einen Agent für den Entwurf wählen.'), { status: 400 });
+  const t = it.templateId ? templates.findTemplate(it.templateId) : null;
+  let prompt;
+  if (t) {
+    // Erstes Vorlagen-Feld bekommt den Titel, falls nicht ausgefüllt.
+    const values = { ...(it.values || {}) };
+    if (t.fields[0] && !values[t.fields[0]]) values[t.fields[0]] = it.title;
+    prompt = templates.fillTemplate(t, values);
+  } else {
+    prompt = `${it.type}: ${it.title}`;
+  }
+  if (it.notes) prompt += `\n\nHinweise: ${it.notes}`;
+  prompt += `\n\n(Geplant für ${new Date(it.date + 'T12:00:00').toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric' })})`;
+  agents.enqueue(agentId, prompt, {
+    projectId: it.projectId ?? null,
+    profileId: it.profileId || undefined,
+    source: 'planner',
+    templateTitle: `📅 ${it.title}`,
+    structure: t?.structure,
+    limits: t?.limits,
+    planItemId: it.id,
+  });
+  planner.updatePlanItem(id, { agentId });
+  it.pending = true;
+  emitPlan();
+  return it;
+});
+
+// --- Postfach
+const inboxDone = (result) => { emit('game', agents.gameInfo()); emitProfiles(); emitPlan(); return result; };
+route('GET', '/api/inbox', (_, __, url) => inbox.listInbox({ projectId: url.searchParams.get('projectId') || '', profileId: url.searchParams.get('profileId') || '' }));
+route('POST', '/api/inbox/:id/approve', ({ id }, body) => inboxDone(inbox.approve(id, body)));
+route('POST', '/api/inbox/:id/reject', ({ id }, body) => inboxDone(inbox.reject(id, body)));
+route('POST', '/api/inbox/:id/done', ({ id }) => inboxDone(inbox.done(id)));
+route('POST', '/api/inbox/:id/edit', ({ id }, body) => inbox.edit(id, body));
+route('POST', '/api/inbox/:id/revise', ({ id }, body) => inboxDone(inbox.revise(id, body, (aid, p, o) => agents.enqueue(aid, p, o))));
+
+// --- Umwandeln: Ergebnis in ein oder mehrere Vorlagen-Formate überführen
+route('POST', '/api/convert', (_, body) => {
+  const entry = archive.find(body.sourceId);
+  let text = entry ? entry.finalText || entry.text : null;
+  if (!text && body.agentId) text = agents.findAgent(body.agentId)?.messages.find((m) => m.id === body.sourceId)?.text;
+  if (!text) throw notFound('Ausgangsergebnis nicht gefunden');
+  const ids = Array.isArray(body.templateIds) ? body.templateIds : [];
+  const list = ids.map((x) => templates.findTemplate(x)).filter(Boolean);
+  if (!list.length) throw Object.assign(new Error('Bitte mindestens ein Zielformat wählen.'), { status: 400 });
+  const target = body.targetAgentId || entry?.agentId || body.agentId;
+  if (!agents.findAgent(target)) throw Object.assign(new Error('Bitte einen Agent wählen.'), { status: 400 });
+  for (const t of list) {
+    agents.enqueue(target, templates.conversionPrompt(t, text, body.note), {
+      projectId: entry ? entry.projectId ?? null : undefined,
+      profileId: entry ? entry.profileId || 'none' : undefined,
+      source: 'convert',
+      templateTitle: `♻️ ${t.title}`,
+      structure: t.structure,
+      limits: t.limits,
+    });
+  }
+  return { ok: true, count: list.length };
 });
 
 // --- Schichtplan
@@ -219,8 +328,14 @@ route('PATCH', '/api/agents/:id', ({ id }, body) => agents.publicAgent(agents.up
 route('DELETE', '/api/agents/:id', ({ id }) => { agents.dismiss(id); return { ok: true }; });
 route('POST', '/api/agents/:id/tasks', ({ id }, body) => agents.publicAgent(agents.enqueue(id, body.prompt, {
   projectId: body.projectId === undefined ? undefined : body.projectId || null,
+  profileId: profileOpt(body.profileId),
 })));
-route('POST', '/api/agents/:id/relay-decision', ({ id }, body) => { agents.relayDecision(id, Boolean(body.approve)); return { ok: true }; });
+route('POST', '/api/agents/:id/relay-decision', ({ id }, body) => {
+  agents.relayDecision(id, Boolean(body.approve));
+  inbox.notifyChanged();
+  emit('game', agents.gameInfo());
+  return { ok: true };
+});
 route('POST', '/api/agents/:id/handoff', ({ id }, body) => agents.publicAgent(agents.handoff(id, {
   toAgentId: body.toAgentId,
   messageId: body.messageId,
@@ -239,7 +354,7 @@ route('POST', '/api/agents/:id/open-folder', ({ id }) => {
 route('POST', '/api/broadcast', (_, body) => {
   const ids = Array.isArray(body.agentIds) ? body.agentIds : [];
   if (!ids.length) throw Object.assign(new Error('Keine Agents ausgewählt'), { status: 400 });
-  const opts = { projectId: body.projectId === undefined ? undefined : body.projectId || null, source: 'broadcast' };
+  const opts = { projectId: body.projectId === undefined ? undefined : body.projectId || null, profileId: profileOpt(body.profileId), source: 'broadcast' };
   for (const id of ids) agents.enqueue(id, body.prompt, opts);
   const chosen = ids.map((id) => agents.findAgent(id)).filter(Boolean);
   const isClaude = (a) => a.provider.startsWith('claude');

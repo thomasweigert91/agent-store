@@ -50,6 +50,9 @@ function validate(body, existing = {}) {
     icon: ICONS.includes(body.icon) ? body.icon : existing.icon || '📁',
     color: /^#[0-9a-f]{6}$/i.test(body.color || '') ? body.color : existing.color || '#60a5fa',
     description: String(body.description ?? existing.description ?? '').slice(0, 500),
+    profileId: body.profileId !== undefined
+      ? (state.profiles.some((x) => x.id === body.profileId) ? body.profileId : null)
+      : existing.profileId ?? null,
   };
 }
 

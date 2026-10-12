@@ -20,6 +20,9 @@ const S = {
   projectIcons: [],
   upgradeCatalog: [],
   talentCatalog: [],
+  profiles: [],
+  templateCategories: [],
+  planTypes: [],
   storeSlot: null,
   online: false,
 };
@@ -129,8 +132,16 @@ function renderStats() {
   $('#stat-working').textContent = g.working ?? 0;
   $('#stat-quests').textContent = g.totalQuests ?? 0;
   $('#stat-morale').textContent = `${Math.round((g.morale || 1) * 100)}%`;
+  renderInboxBadge(g.inboxCount);
   $('#welcome').hidden = (g.agentCount ?? 0) > 0;
   renderProjectPicker();
+}
+
+function renderInboxBadge(count) {
+  const b = $('#inbox-badge');
+  if (!b) return;
+  b.hidden = !(count > 0);
+  b.textContent = count > 99 ? '99+' : String(count || 0);
 }
 
 function renderProjectPicker() {
@@ -520,7 +531,7 @@ function messageHtml(m) {
     const reward = (meta.coins ? `<span class="reward">+${meta.coins} 🪙 +${meta.xp} XP</span>` : '')
       + (typeof meta.score === 'number' ? `<span class="chip score ${meta.score >= meta.minScore ? 'ok' : 'bad'}">🧐 ${meta.score}/10 ${meta.score >= meta.minScore ? '✅' : '↩️'}</span>` : '')
       + projectChip(meta.projectId);
-    return `<div class="msg assistant" data-mid="${esc(m.id)}"><div class="bubble">${renderMarkdown(m.text)}</div><div class="meta">${bits.join(' · ')} ${reward}<button class="copy-msg" data-copy-mid="${esc(m.id)}">📋 kopieren</button><button class="copy-msg handoff-btn" data-handoff-mid="${esc(m.id)}">➡️ Weitergeben an …</button></div></div>`;
+    return `<div class="msg assistant" data-mid="${esc(m.id)}"><div class="bubble">${renderMarkdown(m.text)}</div><div class="meta">${bits.join(' · ')} ${reward}<button class="copy-msg" data-copy-mid="${esc(m.id)}">📋 kopieren</button><button class="copy-msg handoff-btn" data-handoff-mid="${esc(m.id)}">➡️ Weitergeben an …</button><button class="copy-msg convert-btn" data-convert-mid="${esc(m.id)}">♻️ Umwandeln</button></div></div>`;
   }
   if (m.role === 'error') {
     const denied = /Verweigert:|permission/i.test(m.text);
@@ -562,6 +573,7 @@ function renderChat() {
       <textarea id="composer-text" placeholder="Neuer Auftrag an ${esc(a.name)}… (Strg+Enter zum Senden)"></textarea>
       <div class="composer-row">
         <select id="composer-project" class="mini-select" title="Projekt für diesen Auftrag">${panels.projectOptions(S.game.activeProjectId, { none: '📄 Kein Projekt' })}</select>
+        ${S.profiles.length ? `<select id="composer-profile" class="mini-select" title="Kontext-Profil für diesen Auftrag">${panels.profileOptions(null, { none: '🏢 Kein Profil', projectDefault: true })}</select>` : ''}
         <span class="hint">${a.running ? 'Arbeitet gerade – neue Aufträge landen in der Warteschlange.' : '<span class="kbd">Strg</span>+<span class="kbd">Enter</span> senden'}</span>
         <button type="button" class="btn btn-sm btn-ghost" id="btn-folder" title="Arbeitsordner öffnen">📂 Ordner</button>
         <button type="button" class="btn btn-sm btn-ghost" id="btn-reset" title="Gedächtnis leeren und neue Session starten">🧹 Neue Session</button>
@@ -580,7 +592,11 @@ function renderChat() {
     const prompt = ta.value.trim();
     if (!prompt) return;
     try {
-      await api('POST', `/api/agents/${a.id}/tasks`, { prompt, projectId: $('#composer-project').value || null });
+      await api('POST', `/api/agents/${a.id}/tasks`, {
+        prompt,
+        projectId: $('#composer-project').value || null,
+        ...($('#composer-profile') ? { profileId: panels.profileParam($('#composer-profile').value) } : {}),
+      });
       ta.value = '';
       if (S.draft) delete S.draft[a.id];
     } catch (err) { toast(err.message, 'error'); }
@@ -785,6 +801,8 @@ $('#drawer').addEventListener('click', async (e) => {
   }
   const retryBtn = e.target.closest('[data-retry-mid]');
   if (retryBtn) return retryFailed(S.openId, retryBtn.dataset.retryMid, retryBtn.dataset.unlock === '1');
+  const convertBtn = e.target.closest('[data-convert-mid]');
+  if (convertBtn) return panels.openConvert({ sourceId: convertBtn.dataset.convertMid, agentId: S.openId });
   const handoffBtn = e.target.closest('[data-handoff-mid]');
   if (handoffBtn) return openHandoff(S.openId, handoffBtn.dataset.handoffMid);
   const msgBtn = e.target.closest('[data-copy-mid]');
@@ -811,7 +829,7 @@ async function retryFailed(agentId, errorId, unlock) {
       if (!confirm(`${a.name} auf „Volle Kontrolle“ setzen? Der Agent darf dann auch Terminal-Befehle in seinem Arbeitsordner ausführen.`)) return;
       await api('PATCH', `/api/agents/${a.id}`, { autonomy: 'full' });
     }
-    await api('POST', `/api/agents/${a.id}/tasks`, { prompt: task.text, projectId: task.meta?.projectId ?? null });
+    await api('POST', `/api/agents/${a.id}/tasks`, { prompt: task.text, projectId: task.meta?.projectId ?? null, profileId: task.meta?.profileId ?? null });
     toast(unlock ? '🔓 Befehle erlaubt – Auftrag läuft erneut' : '🔁 Auftrag läuft erneut');
   } catch (err) { toast(err.message, 'error'); }
 }
@@ -1110,6 +1128,9 @@ function connect() {
     ticker(`🏆 Erfolg freigeschaltet: ${x.title} (+${x.reward} 🪙)`);
   });
   on('projects', (list) => { S.projects = list; renderProjectPicker(); });
+  on('profiles', (list) => { S.profiles = list; });
+  on('inbox', (x) => { S.game.inboxCount = x.count; renderInboxBadge(x.count); });
+  on('plan', () => { if ($('#modal-card .plan-grid') && $('#modal').classList.contains('open')) panels.openPlanner(); });
   on('toast', (t) => {
     toast(t.text, t.kind === 'error' ? 'error' : '');
     ticker(t.text);
@@ -1134,6 +1155,9 @@ async function loadState() {
     S.projectIcons = st.projectIcons || [];
     S.upgradeCatalog = st.upgradeCatalog || [];
     S.talentCatalog = st.talentCatalog || [];
+    S.profiles = st.profiles || [];
+    S.templateCategories = st.templateCategories || [];
+    S.planTypes = st.planTypes || [];
     S.agents = new Map(st.agents.map((a) => [a.id, a]));
     desks.forEach((d) => (d.agentId = undefined));
     renderStats();
@@ -1155,6 +1179,9 @@ $('#btn-schedule').onclick = () => panels.openSchedules().catch((e) => toast(e.m
 $('#btn-projects').onclick = () => panels.openProjects().catch((e) => toast(e.message, 'error'));
 $('#btn-achievements').onclick = () => panels.openAchievements().catch((e) => toast(e.message, 'error'));
 $('#btn-stats').onclick = () => panels.openStats().catch((e) => toast(e.message, 'error'));
+$('#btn-inbox').onclick = () => panels.openInbox().catch((e) => toast(e.message, 'error'));
+$('#btn-planner').onclick = () => panels.openPlanner().catch((e) => toast(e.message, 'error'));
+$('#btn-profiles').onclick = () => panels.openProfiles().catch((e) => toast(e.message, 'error'));
 $('#active-project').onchange = async (e) => {
   if (e.target.value === '__new') { e.target.value = S.game.activeProjectId || ''; panels.openProjects().then(() => $('#prj-new')?.click()); return; }
   try { await api('PUT', '/api/active-project', { projectId: e.target.value || null }); } catch (err) { toast(err.message, 'error'); }
@@ -1180,6 +1207,8 @@ document.addEventListener('keydown', (e) => {
   } else if (e.key === 's') openStore();
   else if (e.key === 'q') $('#btn-quests').click();
   else if (e.key === 'p') $('#btn-projects').click();
+  else if (e.key === 'i') $('#btn-inbox').click();
+  else if (e.key === 'k') $('#btn-planner').click();
   else if (e.key === 'm') openBroadcast();
 });
 

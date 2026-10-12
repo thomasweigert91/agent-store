@@ -57,15 +57,57 @@ In der App zeigen die Pillen oben rechts, welche Antriebe bereit sind (● grün
 - **Level:** Praktikant → Junior → Fachkraft → Profi → Experte → Meister → Großmeister → Legende.
 - **Claude-Abo-Anzeige:** Nach Claude-Aufträgen erscheint oben die Auslastung deines 5-Stunden- und 7-Tage-Limits.
 
-**Tastatur:** `1`…`0` öffnet den jeweiligen Schreibtisch · `s` Store · `q` Quest-Board · `p` Projekte ·
+**Tastatur:** `1`…`0` öffnet den jeweiligen Schreibtisch · `s` Store · `i` Postfach · `k` Planer · `q` Quest-Board · `p` Projekte ·
 `m` Massenauftrag · `Esc` schließen · `Strg+Enter` sendet in der Detailansicht.
 
-### 📜 Quest-Board
+### 📥 Postfach – alles, was auf dich wartet
 
-Fertige Auftragsvorlagen zum Anklicken (Wochenrecherche, Produkttext, Code-Review, Blogpost, E-Mail-Antwort,
-Social-Media-Paket, Übersetzung, Brainstorming, Wettbewerbsanalyse, Projektplan). Felder ausfüllen, Agent wählen
-(der passende wird vorausgewählt), Projekt wählen, starten. Hat der Agent eine 🔗 Kette, läuft sie automatisch weiter.
-Eigene Vorlagen: **＋ Eigene Vorlage** – alles in `{{doppelten Klammern}}` wird beim Start als Feld abgefragt.
+Das Postfach (Knopf mit rotem Zähler) sammelt bereichsübergreifend alles Offene: neue Ergebnisse, angehaltene
+⏸️ Weitergaben, Ergebnisse, bei denen der Prüfer sein Ziel nicht erreicht hat, und Entwürfe aus dem Planer.
+Filterbar nach Projekt und Profil. Pro Eintrag:
+
+- **✅ Freigeben**, **✖ Ablehnen** (mit Grund), **✔ Erledigt**
+- **✏️ Bearbeiten** – deine Endfassung wird im Archiv gespeichert
+- **🔁 Nochmal mit Hinweis** – z. B. „kürzer, ohne Emojis“ → derselbe Agent überarbeitet
+- **♻️ Umwandeln** und **📋 kopieren** – bei Vorlagen mit Abschnitten hat jeder Abschnitt (z. B. CAPTION, HASHTAGS)
+  einen eigenen Kopier-Knopf; überschrittene Limits (Zeichen, Hashtags) werden angezeigt
+- **💡 Als Vorliebe merken** – Freigabe, Ablehnungsgrund oder Hinweis wandern als Vorliebe ins Kontext-Profil
+
+### 🏢 Kontext-Profile
+
+Beliebig viele Profile, z. B. „Meine Firma“, „Etsy-Shop“, „Social Media“ – mit Zweck, Angebot, Zielgruppe, Ton/Stil,
+Regeln & No-Gos, Beispielen und gelernten Vorlieben. Jedes **Projekt hat ein Standard-Profil**; beim Auftrag
+(Detailansicht, Quests, Planer) kannst du ein anderes oder keins wählen. Das Profil wird dem Auftrag als kompakter
+Kontextblock vorangestellt – so musst du Zielgruppe und Ton nie wieder dazuschreiben.
+
+### 📅 Planer
+
+Wochen- und Monatsansicht für alles mit Datum: Posts, Newsletter, Angebote, Recherchen, Deadlines (Typ frei wählbar).
+Ein Eintrag hat Projekt, Profil, Agent, optional eine Vorlage und den Status Idee → Entwurf → Freigegeben → Erledigt.
+**✨ Entwurf erzeugen** schickt den Auftrag an den Agent; das Ergebnis wird verknüpft (📎) und landet im Postfach.
+Freigeben/Erledigt im Postfach setzt den Status im Planer mit. **☰ Mehrere planen** verteilt eine Themenliste
+(eine Zeile pro Thema) über mehrere Tage – im Archiv übernimmt **📅 In Planer** die Aufzählung eines Ergebnisses direkt.
+
+### 📜 Quest-Board & Vorlagen-Pakete
+
+Vorlagen in Kategorien: **📱 Social Media** (Instagram-Post, Karussell, Reel-/TikTok-Skript, Pinterest-Pin,
+LinkedIn, Paket), **🚀 Gründung & Business** (Geschäftsidee prüfen, Zielgruppe, Preise, Businessplan, Name & Marke,
+Projektplan), **🛍️ Shop & Produkte** (Produkttext, Listing mit Tags), **✉️ Kommunikation** (E-Mail, Angebot,
+Newsletter, Blogpost, Übersetzung), **🔬 Recherche & Analyse** (Wettbewerb, Trends, Wochenrecherche, Zusammenfassung,
+Brainstorming) und **💻 Technik** (Code-Review).
+
+- Felder ausfüllen, Agent wählen (der passende wird vorausgewählt), Projekt und Profil wählen, starten.
+- **Abschnitte:** Vorlagen können eine feste Ausgabestruktur haben (z. B. `BETREFF, TEXT`) – der Agent gliedert
+  seine Antwort genau so, im Postfach ist jeder Abschnitt einzeln kopierbar. Optional mit **Limit** (max. Zeichen
+  für einen Abschnitt, max. Hashtags).
+- **Eigene Vorlagen** mit `{{platzhaltern}}`, Kategorie, Abschnitten und Limits; **⬇ Export / ⬆ Import** als JSON-Paket
+  (z. B. zum Sichern oder Weitergeben).
+
+### ♻️ Umwandeln
+
+An jedem Ergebnis (Detailansicht, Archiv, Postfach): ein oder mehrere Zielformate aus den Vorlagen wählen – etwa
+Blogpost → Instagram-Post + Newsletter, Recherche → Projektplan. Das Ergebnis geht als Ausgangsmaterial mit, pro Format
+entsteht ein eigener Auftrag (gleiches Projekt und Profil).
 
 ### 🗓️ Schichtplan
 
@@ -151,6 +193,9 @@ agent-store/
 │  ├─ templates.js          Quest-Board-Vorlagen mit {{Platzhaltern}}
 │  ├─ scheduler.js          Schichtplan (Prüfung alle 20 s)
 │  ├─ progress.js           Upgrades, Erfolge, Talente, Statistik
+│  ├─ profiles.js           Kontext-Profile, gelernte Vorlieben
+│  ├─ planner.js            Planer-Einträge, Entwurf-Verknüpfung, „Mehrere planen“
+│  ├─ inbox.js              Postfach, Abschnitts-Erkennung, Limit-Prüfung, Aktionen
 │  └─ providers/
 │     ├─ claudeCli.js       claude -p --output-format stream-json (Session via --resume)
 │     ├─ antigravityCli.js  agy --print --output-format stream-json (Gedächtnis via --conversation)
@@ -161,7 +206,8 @@ agent-store/
 │     └─ proc.js / shared.js  Prozess-Handling, Abbruch (taskkill /T), SSE-Parser
 ├─ public/                  Oberfläche (Vanilla JS, kein Build-Schritt)
 │  ├─ index.html, styles.css, app.js, markdown.js
-│  ├─ panels.js             Quest-Board, Schichtplan, Projekte/Archiv, Erfolge, Statistik, Upgrades
+│  ├─ panels.js             Quest-Board, Schichtplan, Projekte/Archiv, Erfolge, Statistik, Upgrades,
+│  │                        Profile, Planer, Postfach, Umwandeln
 │  ├─ print.html / print.js Druckansicht für den PDF-Export
 │  └─ pixel.js              Pixel-Büroszenen (Canvas 80×48, 8 fps, Posen, Tag/Nacht, Upgrades)
 ├─ data/                    Spielstand + Einstellungen (git-ignoriert)
@@ -202,6 +248,11 @@ API-Keys liegen nur lokal in `data/settings.json` bzw. `.env`.
 | GET/POST/DELETE | `/api/templates[/:id]` | Vorlagen; `POST /api/templates/:id/run {agentId, values, projectId}` |
 | GET/POST/PATCH/DELETE | `/api/schedules[/:id]` | Schichten; `POST /api/schedules/:id/run-now` |
 | GET | `/api/progress` · `/api/stats` | Upgrades/Erfolge/Talente · Statistik; `POST /api/upgrades/:id/buy` |
+| GET/POST/PATCH/DELETE | `/api/profiles[/:id]` | Kontext-Profile |
+| GET/POST/PATCH/DELETE | `/api/plan[/:id]` | Planer (`?from&to`); `POST /api/plan/bulk`, `POST /api/plan/:id/generate` |
+| GET | `/api/inbox?projectId&profileId` | Postfach; `POST /api/inbox/:id/approve·reject·done·edit·revise` |
+| POST | `/api/convert` | Umwandeln `{sourceId, templateIds[], targetAgentId?, note?}` |
+| GET/POST | `/api/templates/export` · `/api/templates/import` | Vorlagen-Pakete als JSON |
 | PUT | `/api/settings` | Keys, Parallelität, Sound |
 
 Schreibende Anfragen brauchen den Header `X-Agent-Store: 1`.
