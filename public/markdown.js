@@ -31,7 +31,7 @@ export function renderMarkdown(src) {
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
-    const fence = line.match(/^\s*```(\w[\w+-]*)?\s*$/);
+    const fence = line.match(/^\s*```([^\s`]+)?\s*$/);
     if (fence) {
       const buf = [];
       i++;

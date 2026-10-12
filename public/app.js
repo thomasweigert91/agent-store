@@ -42,7 +42,7 @@ async function api(method, url, body) {
 }
 
 const AUTONOMY = {
-  safe: { label: '🔒 Sicher – nur lesen & antworten', short: null },
+  safe: { label: '🔒 Sicher – liest & antwortet, Dateien speichert der Agent Store', short: null },
   edits: { label: '✏️ Darf Dateien im Arbeitsordner bearbeiten', short: '✏️ Edits' },
   auto: { label: '🤖 Auto – Agent entscheidet selbst (Claude)', short: '🤖 Auto' },
   full: { label: '⚠️ Volle Kontrolle – auch Shell-Befehle', short: '⚠️ Voll' },

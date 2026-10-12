@@ -12,6 +12,7 @@ import { personaWithTalents, activeTalents, moraleFactor, bump, checkAchievement
 import { nextShiftFor, removeAgentSchedules } from './scheduler.js';
 import { findProfile, profilePreamble, resolveProfileId } from './profiles.js';
 import { linkResult, clearPending as clearPlanPending, removeAgent as removePlanAgent } from './planner.js';
+import { fileBlockHint, saveFileBlocks } from './fileblocks.js';
 
 export const MAX_AGENTS = 10;        // Plätze pro Büro
 const MAX_TOTAL_AGENTS = 60;         // Agents insgesamt (alle Projekte)
@@ -551,9 +552,12 @@ async function execute(agent) {
 
   try {
     if (!provider) throw new Error('Unbekannter Provider: ' + agent.provider);
+    // Darf der Agent selbst Dateien schreiben? Sonst übernimmt der Agent Store das über Dateiblöcke.
+    const canWrite = agent.provider.endsWith('-cli') && agent.autonomy !== 'safe';
+    const writeHint = canWrite || reviewMode ? '' : fileBlockHint(project ? `Projektordner „${project.name}“` : 'Arbeitsordner');
     const result = await provider.run({
       agent,
-      prompt: (project ? projectPreamble(project) : '') + (profile ? profilePreamble(profile) : '') + task.prompt + (reviewMode ? REVIEW_SUFFIX : ''),
+      prompt: (project ? projectPreamble(project) : '') + (profile ? profilePreamble(profile) : '') + task.prompt + (reviewMode ? REVIEW_SUFFIX : '') + writeHint,
       persona: personaWithTalents(agent) + (!agent.projectId && project && agent.projectPrompts?.[project.id]
         ? `\n\nZusätzlich im Projekt „${project.name}“:\n${agent.projectPrompts[project.id]}` : ''),
       history,
@@ -578,6 +582,9 @@ async function execute(agent) {
         ...(reviewMode ? { score, minScore: agent.review.minScore, round: task.round || 1 } : {}),
       },
     });
+    const files = saveFileBlocks(text, project ? [projectFolder(project), agentCwd(agent)] : [agentCwd(agent)]);
+    if (files.saved.length) addMessage(agent, { role: 'system', text: `💾 Gespeichert im ${project ? `Projektordner „${project.name}“` : 'Arbeitsordner'}: ${files.saved.join(', ')}` });
+    if (files.rejected.length) addMessage(agent, { role: 'error', text: `Datei nicht gespeichert: ${files.rejected.join('; ')}` });
     agent.status = 'done';
     agent.unread += 1;
     archiveResult(agent, task, msg, project, durationMs, result.costUsd, score);

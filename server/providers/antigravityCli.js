@@ -146,10 +146,12 @@ export async function run({ agent, prompt, persona, cwd, signal, onEvent, extraD
   };
 
   const retryWithoutTools = (err) => {
-    onEvent({ type: 'activity', text: '♻️ Befehl verweigert – neuer Anlauf ohne Befehle' });
+    onEvent({ type: 'activity', text: `♻️ ${err.denied.join(', ')} verweigert – neuer Anlauf über den Agent Store` });
     return attempt(err.conversationId, `Hinweis: ${err.denied.join(', ')} ist für dich in diesem Modus gesperrt – versuche es nicht erneut. `
-      + 'Erledige den Auftrag ohne Terminal-Befehle: nutze deine Such- und Lese-Werkzeuge oder dein Wissen '
-      + 'und antworte jetzt direkt mit dem vollständigen Ergebnis. Kennzeichne, falls du etwas nicht prüfen konntest.');
+      + 'Führe keine Terminal-Befehle aus und lege keine Dateien selbst an. Nutze für Recherche deine Such- und Lese-Werkzeuge oder dein Wissen '
+      + 'und antworte jetzt direkt mit dem vollständigen Ergebnis. Soll eine Datei entstehen, gib sie als Block aus: '
+      + 'erste Zeile ```datei:relativer/pfad.md, dann der Inhalt, dann ``` – der Agent Store speichert sie für dich. '
+      + 'Kennzeichne, falls du etwas nicht prüfen konntest.');
   };
 
   try {
