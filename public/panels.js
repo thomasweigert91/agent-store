@@ -332,7 +332,7 @@ async function openProjects(projectId) {
         ${current ? `
           <div class="prj-head">
             <div><h3>${esc(current.icon)} ${esc(current.name)}</h3>
-              ${current.description ? `<div class="prj-desc">${esc(current.description)}</div>` : ''}
+              ${current.description ? `<div class="prj-desc" id="prj-desc" title="Klicken zum Auf-/Zuklappen">${esc(plainDesc(current.description))}</div>` : ''}
               <div class="prj-path" title="Gemeinsamer Projektordner">📂 ${esc(current.path)}</div></div>
             <div class="prj-actions">
               ${current.id === C.S.game.activeProjectId ? '<span class="chip">★ aktiv</span>' : '<button class="btn btn-sm" id="prj-activate">★ Aktiv setzen</button>'}
@@ -355,6 +355,7 @@ async function openProjects(projectId) {
   $('#prj-new').onclick = () => openProjectForm();
   if (current) {
     $('#prj-activate')?.addEventListener('click', async () => { await C.api('PUT', '/api/active-project', { projectId: current.id }); C.S.game.activeProjectId = current.id; openProjects(); });
+    $('#prj-desc')?.addEventListener('click', (e) => e.currentTarget.classList.toggle('open'));
     $('#prj-folder').onclick = () => C.api('POST', `/api/projects/${current.id}/open-folder`).catch((e) => C.toast(e.message, 'error'));
     $('#prj-edit').onclick = () => openProjectForm(current);
     $('#prj-del').onclick = async () => {
@@ -948,4 +949,9 @@ export async function openConvert({ sourceId, agentId }) {
       C.closeModal();
     } catch (err) { C.toast(err.message, 'error'); }
   };
+}
+
+// Markdown-Zeichen aus Projektbeschreibungen entfernen (Anzeige als Klartext)
+function plainDesc(t) {
+  return String(t).replace(/\*\*|__|^#+\s*|^-{3,}\s*$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
 }
