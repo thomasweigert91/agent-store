@@ -667,6 +667,20 @@ async function openPlanner() {
   $('#modal-card').querySelectorAll('[data-item]').forEach((b) => (b.onclick = () => openPlanItemForm(items.find((x) => x.id === b.dataset.item))));
 }
 
+// Typ-Auswahl: feste Typen als Dropdown, „Eigener Typ…“ blendet ein Textfeld ein.
+function typeField(current) {
+  const esc = C.esc;
+  const custom = current && !C.S.planTypes.includes(current);
+  return `<select name="type" onchange="this.nextElementSibling.hidden = this.value !== '__custom'; if (!this.nextElementSibling.hidden) this.nextElementSibling.focus()">
+      ${C.S.planTypes.map((t) => `<option value="${esc(t)}" ${t === current ? 'selected' : ''}>${esc(t)}</option>`).join('')}
+      <option value="__custom" ${custom ? 'selected' : ''}>✏️ Eigener Typ…</option>
+    </select><input name="customType" maxlength="30" placeholder="z. B. Podcast, Messe, Rechnung" value="${custom ? esc(current) : ''}" ${custom ? '' : 'hidden'} style="margin-top:6px">`;
+}
+
+function typeValue(f) {
+  return f.type.value === '__custom' ? (f.customType.value.trim() || 'Sonstiges') : f.type.value;
+}
+
 async function openPlanItemForm(it) {
   const esc = C.esc;
   const isNew = !it.id;
@@ -678,7 +692,7 @@ async function openPlanItemForm(it) {
         <div class="field"><label>Titel / Thema</label><input name="title" maxlength="120" value="${esc(it.title || '')}" placeholder="z. B. Herbst-Kollektion vorstellen"></div>
         <div class="row2">
           <div class="field"><label>Datum</label><input name="date" type="date" value="${esc(it.date || ymd(new Date()))}"></div>
-          <div class="field"><label>Typ</label><input name="type" list="pi-types" value="${esc(it.type || 'Post')}"><datalist id="pi-types">${C.S.planTypes.map((t) => `<option value="${esc(t)}">`).join('')}</datalist></div>
+          <div class="field"><label>Typ</label>${typeField(it.type || 'Post')}</div>
         </div>
         <div class="row2">
           <div class="field"><label>Projekt</label><select name="projectId">${projectOptions(isNew ? C.S.game.activeProjectId : it.projectId)}</select></div>
@@ -706,7 +720,7 @@ async function openPlanItemForm(it) {
   const body = () => {
     const f = $('#pi-form').elements;
     return {
-      title: f.title.value, date: f.date.value, type: f.type.value, notes: f.notes.value,
+      title: f.title.value, date: f.date.value, type: typeValue(f), notes: f.notes.value,
       projectId: f.projectId.value || null, profileId: f.profileId.value || null,
       agentId: f.agentId.value || null, templateId: f.templateId.value || null,
       ...(f.status ? { status: f.status.value } : {}),
@@ -745,7 +759,7 @@ export async function openPlanBulk(prefill = '') {
           <div class="field"><label>Alle … Tage</label><input name="everyDays" type="number" min="1" max="30" value="1"></div>
         </div>
         <div class="row2">
-          <div class="field"><label>Typ</label><input name="type" list="pb-types" value="Post"><datalist id="pb-types">${C.S.planTypes.map((t) => `<option value="${esc(t)}">`).join('')}</datalist></div>
+          <div class="field"><label>Typ</label>${typeField('Post')}</div>
           <div class="field"><label>Vorlage (optional)</label><select name="templateId"><option value="">– Freitext –</option>${templates.map((t) => `<option value="${esc(t.id)}">${esc(t.icon)} ${esc(t.title)}</option>`).join('')}</select></div>
         </div>
         <div class="row2">
@@ -763,7 +777,7 @@ export async function openPlanBulk(prefill = '') {
     try {
       const r = await C.api('POST', '/api/plan/bulk', {
         lines: f.lines.value, startDate: f.startDate.value, everyDays: Number(f.everyDays.value),
-        type: f.type.value, templateId: f.templateId.value || null, projectId: f.projectId.value || null, agentId: f.agentId.value || null,
+        type: typeValue(f), templateId: f.templateId.value || null, projectId: f.projectId.value || null, agentId: f.agentId.value || null,
       });
       if (f.generate.checked) {
         if (!f.agentId.value) C.toast('Für Entwürfe bitte einen Agent wählen.', 'error');
