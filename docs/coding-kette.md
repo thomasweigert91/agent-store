@@ -46,8 +46,14 @@ Vega liest jeder Agent deshalb selbst als neueste Vega-Datei unter `ergebnisse/`
 - **Projekt:** „Coding – <Repo-Name>“ (ein Projekt pro Repo). Projektordner = Standard (`workspaces/projekte/…`),
   damit `ergebnisse/` nicht im Repo landet. Den **Repo-Pfad** in die Projektbeschreibung schreiben
   (z. B. „Repo: D:\code\mein-tool, Branch main“) – sie steht in jedem Auftrag oben im Projekt-Hinweis.
-- **Arbeitsordner** (⚙️ Ausrüstung) bei allen außer Max = Repo-Pfad. So arbeiten Claude-Agents direkt im Code,
-  der Projektordner kommt per `--add-dir` dazu.
+- **Codebase-Ordner im Projekt setzen** (📁 Projekte → ✏️ → „Codebase-Ordner“, per „📁 Wählen…“). Alle Aufträge
+  im Projekt laufen dann dort, egal welcher Arbeitsordner beim Agent eingetragen ist (gilt auch für Max).
+  So arbeiten Claude-Agents direkt im Code, der Projektordner kommt per `--add-dir` dazu. Fehlt der Ordner,
+  bricht der Auftrag mit „Codebase-Ordner fehlt“ ab, statt im falschen Ordner zu laufen.
+- **Kette auf weiterem Repo:** neues Projekt „Coding – <Repo-Name>“ anlegen, Codebase-Ordner wählen, passendes
+  Kontext-Profil (Tech-Stack, Tests, Start) als Standard setzen, Projekt aktiv setzen. Kein Agent muss umgestellt
+  werden, solange die Coding-Agents Stammpersonal sind. Beim Wechsel des Ordners startet jeder Claude-Agent eine
+  neue Session.
 - **Abo-Limits:** Wenn das 5-Stunden-Limit knapp wird, zuerst Otto, Hera und Nova auf `sonnet` stellen. Dex bleibt auf `opus`.
 - Kosten im Store: Stratege 150 + 2× Kritiker 240 + Coder 200 + Texter 100 + Analyst 150 + Security-Wächter 220 + Forscher 120 = **1.180 🪙** (du hast 1.736).
 
