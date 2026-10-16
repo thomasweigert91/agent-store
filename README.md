@@ -140,6 +140,9 @@ nachgeholt. **▶** startet eine Schicht sofort. Das Pixel-Büro wird abends (20
   Massenauftrag, Schichten) werden ihm zugeordnet. Übergaben behalten das Projekt bei.
 - Jedes Projekt hat einen **gemeinsamen Projektordner** (automatisch unter `workspaces/projekte/` oder ein eigener
   Pfad). Claude- und Gemini-Abo-Agents bekommen per `--add-dir` Zugriff darauf und den Projektkontext mitgeschickt.
+- Optional hat ein Projekt einen **Codebase-Ordner** (Repo, per 📁 „Wählen…“ im Projekt-Dialog). Alle Aufträge des Projekts
+  laufen dann in diesem Ordner. Existiert er nicht mehr, schlägt der Auftrag fehl (kein Rückfall auf den Agent-Ordner).
+  Wechselt der Ordner, startet eine Claude-Session neu.
 - **Jedes Ergebnis** landet im Archiv (`data/archive.json`) und bei Projekten zusätzlich als Markdown-Datei in
   `<Projektordner>/ergebnisse/` – nichts verschwindet mehr im Chatverlauf.
 - **📁 Projekte** zeigt alle Projekte mit Volltextsuche, Agent-Filter, **⬇ Markdown-Export** und **🖨 PDF**
@@ -191,7 +194,8 @@ Agents können ihre Ergebnisse an andere Agents weitergeben:
 | ⚠️ Voll | `--permission-mode bypassPermissions` | `--dangerously-skip-permissions` |
 
 Jeder Agent arbeitet in seinem eigenen Ordner unter `workspaces/`. Alternativ kannst du einen eigenen
-Arbeitsordner eintragen, z. B. ein echtes Projekt für den Coder.
+Arbeitsordner eintragen, z. B. ein echtes Projekt für den Coder (📁 „Wählen…“ öffnet einen Windows-Ordnerdialog).
+Hat das Projekt einen **Codebase-Ordner**, hat dieser Vorrang vor dem Arbeitsordner (siehe Projekte).
 
 ---
 
@@ -208,6 +212,7 @@ agent-store/
 │  ├─ catalog.js            Store-Katalog (12 Klassen), Namen, Level-Kurve
 │  ├─ archive.js            Ergebnis-Archiv (data/archive.json), Suche
 │  ├─ projects.js           Projekte, Projektordner, Markdown-Export
+│  ├─ folders.js            Windows-Ordnerdialog (`/api/pick-folder`), Auflösung des Arbeitsordners
 │  ├─ templates.js          Quest-Board-Vorlagen mit {{Platzhaltern}}
 │  ├─ scheduler.js          Schichtplan (Prüfung alle 20 s)
 │  ├─ progress.js           Upgrades, Erfolge, Talente, Statistik
@@ -258,6 +263,7 @@ API-Keys liegen nur lokal in `data/settings.json` bzw. `.env`.
 | PATCH/DELETE | `/api/agents/:id` | Ausrüstung ändern (inkl. `relay`, `review`, `talentsOff`, `look`) / entlassen |
 | POST | `/api/agents/:id/tasks` | Auftrag `{prompt, projectId?}` |
 | POST | `/api/agents/:id/stop` · `/reset` · `/ack` · `/open-folder` | Steuerung |
+| POST | `/api/pick-folder` | Windows-Ordnerdialog `{start?}` → `{path}` (`null` bei Abbruch); 409 wenn schon offen, 501 außerhalb von Windows |
 | POST | `/api/broadcast` | Massenauftrag `{agentIds, prompt}` |
 | POST | `/api/agents/:id/handoff` | Antwort weitergeben `{toAgentId, messageId?, instruction?}` |
 | POST | `/api/agents/:id/relay-decision` | Freigabe-Gate `{approve}` |
