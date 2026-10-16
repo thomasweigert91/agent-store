@@ -30,6 +30,14 @@ const MAX = 10;
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+// Windows-Dialog „Ordner auswählen“ über den Server; der gewählte Pfad landet im Feld (gespeichert wird erst mit „Speichern“).
+async function pickFolderInto(input) {
+  try {
+    const { path } = await api('POST', '/api/pick-folder', { start: input.value.trim() });
+    if (path) input.value = path;
+  } catch (err) { toast(err.message, 'error'); }
+}
+
 async function api(method, url, body) {
   const res = await fetch(url, {
     method,
@@ -37,7 +45,7 @@ async function api(method, url, body) {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || res.statusText);
+  if (!res.ok) throw Object.assign(new Error(data.error || res.statusText), { status: res.status, code: data.code });
   return data;
 }
 
@@ -155,7 +163,71 @@ function renderProjectPicker() {
   const p = S.projects.find((x) => x.id === S.game.activeProjectId);
   sel.parentElement.classList.toggle('active', Boolean(p));
   sel.parentElement.style.setProperty('--pc', p?.color || 'var(--line2)');
+  renderFolderPicker(p);
 }
+
+// Ordner-Schalter: Codebase-Ordner des aktiven Projekts – gilt für neue Aufträge aller Agents im Projekt.
+const folderBase = (dir) => String(dir).replace(/[\\/]+$/, '').split(/[\\/]/).pop() || dir;
+
+function renderFolderPicker(p) {
+  const box = $('#folder-picker');
+  if (!box) return;
+  box.hidden = !p;
+  if (!p) return;
+  const name = $('#folder-name');
+  name.textContent = p.repo ? folderBase(p.repo) : 'kein Ordner';
+  $('#folder-btn').title = p.repo
+    ? `Codebase von „${p.name}“: ${p.repo}\nAlle Agents des Projekts arbeiten hier. Klick zum Wechseln.`
+    : `„${p.name}“ hat keinen Codebase-Ordner – jeder Agent arbeitet in seinem eigenen Ordner. Klick zum Wählen.`;
+  box.classList.toggle('set', Boolean(p.repo));
+  const recent = (p.recentRepos || []).filter(Boolean);
+  const cur = (p.repo || '').toLowerCase();
+  $('#folder-menu').innerHTML = `
+    <div class="folder-menu-head">Codebase für <b>${esc(p.icon)} ${esc(p.name)}</b><small>Gilt für neue Aufträge aller Agents im Projekt. Laufende Ketten bleiben in ihrem Ordner.</small></div>
+    ${recent.map((r) => `
+      <div class="folder-item ${r.toLowerCase() === cur ? 'on' : ''}">
+        <button data-repo="${esc(r)}" title="${esc(r)}"><span class="folder-check">${r.toLowerCase() === cur ? '✓' : ''}</span><b>${esc(folderBase(r))}</b><small>${esc(r)}</small></button>
+        <button class="folder-forget" data-forget="${esc(r)}" title="Aus der Liste entfernen">✕</button>
+      </div>`).join('') || '<div class="folder-empty">Noch keine Ordner benutzt.</div>'}
+    <div class="folder-sep"></div>
+    <button class="folder-action" id="folder-pick">📁 Anderer Ordner…</button>
+    ${p.repo ? '<button class="folder-action" data-repo="">🚫 Ohne Codebase (jeder Agent in seinem Ordner)</button>' : ''}`;
+}
+
+async function setProjectRepo(p, repo, confirmRisky = false) {
+  try {
+    await api('PUT', `/api/projects/${p.id}/repo`, { repo, confirmRisky });
+  } catch (err) {
+    if (err.code === 'risky' && !confirmRisky && confirm(`${err.message}\n\nTrotzdem diesen Ordner verwenden?`)) return setProjectRepo(p, repo, true);
+    if (err.code !== 'risky') toast(err.message, 'error');
+  }
+}
+
+function toggleFolderMenu(open) {
+  const menu = $('#folder-menu');
+  const show = open ?? menu.hidden;
+  menu.hidden = !show;
+  $('#folder-btn').setAttribute('aria-expanded', String(show));
+}
+
+$('#folder-btn').onclick = (e) => { e.stopPropagation(); toggleFolderMenu(); };
+$('#folder-menu').onclick = async (e) => {
+  e.stopPropagation();
+  const p = S.projects.find((x) => x.id === S.game.activeProjectId);
+  if (!p) return;
+  const forget = e.target.closest('[data-forget]');
+  if (forget) { api('POST', `/api/projects/${p.id}/repo/forget`, { repo: forget.dataset.forget }).catch((err) => toast(err.message, 'error')); return; }
+  const pick = e.target.closest('#folder-pick');
+  const item = e.target.closest('[data-repo]');
+  if (!pick && !item) return;
+  toggleFolderMenu(false);
+  if (item) return setProjectRepo(p, item.dataset.repo);
+  try {
+    const { path } = await api('POST', '/api/pick-folder', { start: p.repo || '' });
+    if (path) await setProjectRepo(p, path);
+  } catch (err) { toast(err.message, 'error'); }
+};
+document.addEventListener('click', () => { if (!$('#folder-menu').hidden) toggleFolderMenu(false); });
 
 function projectChip(id) {
   const p = S.projects.find((x) => x.id === id);
@@ -722,8 +794,8 @@ function renderGear() {
       </div>
       <div class="field">
         <label>Arbeitsordner</label>
-        <input name="workdir" value="${esc(a.workdir)}" placeholder="${esc(a.cwd)}">
-        <div class="help">Leer = eigener Ordner im Projekt. Du kannst z. B. <code>D:\\mein-projekt</code> eintragen, damit ein Coder direkt dort arbeitet.</div>
+        <div style="display:flex;gap:6px"><input name="workdir" value="${esc(a.workdir)}" placeholder="${esc(a.cwd)}" style="flex:1;min-width:0"><button type="button" class="btn btn-sm" id="pick-workdir">📁 Wählen…</button></div>
+        <div class="help">Leer = eigener Ordner im Projekt. Du kannst z. B. <code>D:\\mein-projekt</code> eintragen, damit ein Coder direkt dort arbeitet. In Projekten mit Codebase-Ordner arbeitet der Agent dort.</div>
       </div>
       <div class="row2">
         <div class="field">
@@ -826,6 +898,7 @@ function renderGear() {
     syncModel(np, np.defaultModel || '');
     $('#prov-help').textContent = np.available ? (np.version || 'bereit') : (np.hint || '');
   };
+  $('#pick-workdir').onclick = () => pickFolderInto($('#gear-form').elements.workdir);
   $('#gear-form').onsubmit = async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
@@ -1316,7 +1389,7 @@ document.addEventListener('keydown', (e) => {
   grip.addEventListener('dblclick', () => { apply(0); try { localStorage.removeItem('drawerW'); } catch { /* egal */ } });
 })();
 
-const panels = initPanels({ S, api, openModal, closeModal, toast, esc, renderMarkdown, providerShort, fmtDuration, fmtTime });
+const panels = initPanels({ S, api, openModal, closeModal, toast, pickFolderInto, esc, renderMarkdown, providerShort, fmtDuration, fmtTime });
 initFloor();
 renderFloor();
 connect();

@@ -140,6 +140,18 @@ nachgeholt. **▶** startet eine Schicht sofort. Das Pixel-Büro wird abends (20
   Massenauftrag, Schichten) werden ihm zugeordnet. Übergaben behalten das Projekt bei.
 - Jedes Projekt hat einen **gemeinsamen Projektordner** (automatisch unter `workspaces/projekte/` oder ein eigener
   Pfad). Claude- und Gemini-Abo-Agents bekommen per `--add-dir` Zugriff darauf und den Projektkontext mitgeschickt.
+- Optional hat ein Projekt einen **Codebase-Ordner** (Repo). Gewechselt wird er mit dem **💻-Schalter** oben neben der
+  Projektauswahl: zuletzt benutzte Ordner, „📁 Anderer Ordner…“ oder „Ohne Codebase“. Neue Aufträge aller Agents des
+  Projekts laufen dann in diesem Ordner – so arbeitet ein Team (eine Kette) nacheinander in beliebig vielen Repos.
+  **Laufende Ketten behalten ihren Ordner** (er wird beim Auftrag festgehalten und mit jeder Übergabe weitergegeben),
+  Ergebnisdateien tragen die Zeile `Codebase: …`. Laufwerkswurzeln, System-/Programmordner und das ganze
+  Benutzerprofil gehen nur nach Rückfrage. Existiert der Ordner nicht mehr, schlägt der Auftrag fehl (kein Rückfall
+  auf den Agent-Ordner). Wechselt der Ordner, startet eine Claude-Session neu.
+- **🔀 Git im Projekt:** Ist ein Codebase-Ordner eingetragen, zeigt das Projekt Branch, Sync-Stand, geänderte Dateien und
+  die letzten Commits. **✅ Alles committen** committet alle Änderungen, **🚀 pushen** schiebt den aktuellen Branch nach
+  `origin` (mit `-u`, nie force) und bietet danach den Link zum Pull Request an. Schutz: `main`/`master` nur nach
+  Rückfrage, Commits mit `.env`, `data/settings.json`, Schlüsseldateien oder API-Keys im Inhalt werden blockiert.
+  Die Agents committen selbst nur lokal – gepusht wird auf deinen Klick.
 - **Jedes Ergebnis** landet im Archiv (`data/archive.json`) und bei Projekten zusätzlich als Markdown-Datei in
   `<Projektordner>/ergebnisse/` – nichts verschwindet mehr im Chatverlauf.
 - **📁 Projekte** zeigt alle Projekte mit Volltextsuche, Agent-Filter, **⬇ Markdown-Export** und **🖨 PDF**
@@ -191,7 +203,8 @@ Agents können ihre Ergebnisse an andere Agents weitergeben:
 | ⚠️ Voll | `--permission-mode bypassPermissions` | `--dangerously-skip-permissions` |
 
 Jeder Agent arbeitet in seinem eigenen Ordner unter `workspaces/`. Alternativ kannst du einen eigenen
-Arbeitsordner eintragen, z. B. ein echtes Projekt für den Coder.
+Arbeitsordner eintragen, z. B. ein echtes Projekt für den Coder (📁 „Wählen…“ öffnet einen Windows-Ordnerdialog).
+Hat das Projekt einen **Codebase-Ordner**, hat dieser Vorrang vor dem Arbeitsordner (siehe Projekte).
 
 ---
 
@@ -208,6 +221,8 @@ agent-store/
 │  ├─ catalog.js            Store-Katalog (12 Klassen), Namen, Level-Kurve
 │  ├─ archive.js            Ergebnis-Archiv (data/archive.json), Suche
 │  ├─ projects.js           Projekte, Projektordner, Markdown-Export
+│  ├─ folders.js            Windows-Ordnerdialog (`/api/pick-folder`), Auflösung des Arbeitsordners
+│  ├─ git.js                Git in der Codebase: Status, Commit, Push (Secret-Sperre, Schutz für main)
 │  ├─ templates.js          Quest-Board-Vorlagen mit {{Platzhaltern}}
 │  ├─ scheduler.js          Schichtplan (Prüfung alle 20 s)
 │  ├─ progress.js           Upgrades, Erfolge, Talente, Statistik
@@ -258,10 +273,13 @@ API-Keys liegen nur lokal in `data/settings.json` bzw. `.env`.
 | PATCH/DELETE | `/api/agents/:id` | Ausrüstung ändern (inkl. `relay`, `review`, `talentsOff`, `look`) / entlassen |
 | POST | `/api/agents/:id/tasks` | Auftrag `{prompt, projectId?}` |
 | POST | `/api/agents/:id/stop` · `/reset` · `/ack` · `/open-folder` | Steuerung |
+| POST | `/api/pick-folder` | Windows-Ordnerdialog `{start?}` → `{path}` (`null` bei Abbruch); 409 wenn schon offen, 501 außerhalb von Windows |
 | POST | `/api/broadcast` | Massenauftrag `{agentIds, prompt}` |
 | POST | `/api/agents/:id/handoff` | Antwort weitergeben `{toAgentId, messageId?, instruction?}` |
 | POST | `/api/agents/:id/relay-decision` | Freigabe-Gate `{approve}` |
 | GET/POST/PATCH/DELETE | `/api/projects[/:id]` | Projekte; `PUT /api/active-project`, `GET /api/projects/:id/export` |
+| PUT/POST | `/api/projects/:id/repo` · `/repo/forget` | Codebase-Ordner wechseln `{repo, confirmRisky?}` (409 `code: risky` bei riskanten Ordnern) · aus der Liste entfernen `{repo}` |
+| GET/POST | `/api/projects/:id/git` · `/git/commit` · `/git/push` | Git-Stand der Codebase; Commit `{message}`; Push `{confirmProtected?}` → `{branch, prLink}` (409 bei main ohne Bestätigung) |
 | GET | `/api/archive?projectId&q&agentId` | Archiv durchsuchen |
 | GET/POST/DELETE | `/api/templates[/:id]` | Vorlagen; `POST /api/templates/:id/run {agentId, values, projectId}` |
 | GET/POST/PATCH/DELETE | `/api/schedules[/:id]` | Schichten; `POST /api/schedules/:id/run-now` |

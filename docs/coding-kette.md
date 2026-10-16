@@ -26,7 +26,8 @@ soll: Otto direkt hinter Vega (Plan), Nova direkt hinter Dex (Code). Security is
 Hera macht zusätzlich ein breites Audit des ganzen Repos und speist ihre Funde vorne als neue Aufgaben ein.
 
 Wie bei den anderen Ketten bekommt jeder Agent nur das Ergebnis seines direkten Vorgängers. Die Spezifikation von
-Vega liest jeder Agent deshalb selbst als neueste Vega-Datei unter `ergebnisse/` im Projektordner.
+Vega liest jeder Agent deshalb selbst als neueste Vega-Datei unter `ergebnisse/` im Projektordner. Jede Ergebnisdatei
+trägt die Zeile `Codebase: …`; gezählt wird nur die neueste Datei mit derselben Codebase wie der eigene Auftrag.
 
 ---
 
@@ -43,11 +44,19 @@ Vega liest jeder Agent deshalb selbst als neueste Vega-Datei unter `ergebnisse/`
 | 7 | 🛡️ Hera | Security-Audit des ganzen Repos | Security-Wächter | Claude (Abo) · `opus` | 🤖 Auto (nur lesen/scannen) | Repo |
 | 8 | 🔬 Max | Tech-Scout: Libraries, APIs, Doku vergleichen | Forscher | Gemini (Abo) · Standard | 🔒 Sicher | eigener |
 
-- **Projekt:** „Coding – <Repo-Name>“ (ein Projekt pro Repo). Projektordner = Standard (`workspaces/projekte/…`),
-  damit `ergebnisse/` nicht im Repo landet. Den **Repo-Pfad** in die Projektbeschreibung schreiben
-  (z. B. „Repo: D:\code\mein-tool, Branch main“) – sie steht in jedem Auftrag oben im Projekt-Hinweis.
-- **Arbeitsordner** (⚙️ Ausrüstung) bei allen außer Max = Repo-Pfad. So arbeiten Claude-Agents direkt im Code,
-  der Projektordner kommt per `--add-dir` dazu.
+- **Ein Projekt „Coding“ für alle Repos.** Projektordner = Standard (`workspaces/projekte/…`), damit `ergebnisse/`
+  nicht im Repo landet.
+- **Ordner wechseln mit dem 💻-Schalter** oben neben der Projektauswahl: zuletzt benutzte Ordner, „📁 Anderer Ordner…“
+  (Windows-Dialog) oder „Ohne Codebase“. Der gewählte Ordner gilt für **neue Aufträge aller Agents des Projekts**
+  (auch Schichten und Planer), egal welcher Arbeitsordner beim Agent eingetragen ist (gilt auch für Max). Der
+  Projektordner kommt per `--add-dir` dazu. Beim Wechsel startet jeder Claude-Agent eine neue Session.
+- **Laufende Ketten bleiben in ihrem Ordner:** Der Ordner wird beim Start eines Auftrags festgehalten und über jede
+  Übergabe, Prüferrunde und Freigabe weitergereicht. Du kannst also wechseln, während Dex in Repo A arbeitet – Nova
+  reviewt trotzdem in Repo A.
+- **Schutz:** Laufwerkswurzeln, System- und Programmordner sowie das ganze Benutzerprofil gehen nur nach Rückfrage.
+  Fehlt ein Ordner später, bricht der Auftrag mit „Codebase-Ordner fehlt“ ab, statt im falschen Ordner zu laufen.
+- **Tech-Stack pro Repo:** Steht nicht im Profil, sondern im Repo selbst (README, package.json). Vega liest ihn dort;
+  das Profil „Coding“ enthält nur repo-unabhängige Regeln.
 - **Abo-Limits:** Wenn das 5-Stunden-Limit knapp wird, zuerst Otto, Hera und Nova auf `sonnet` stellen. Dex bleibt auf `opus`.
 - Kosten im Store: Stratege 150 + 2× Kritiker 240 + Coder 200 + Texter 100 + Analyst 150 + Security-Wächter 220 + Forscher 120 = **1.180 🪙** (du hast 1.736).
 
@@ -284,7 +293,7 @@ Du schließt eine freigegebene Änderung ab: Doku im Repo aktualisieren und eine
 ## Doku-Änderungen (Datei + was, Commit-Hash)
 ## PR-Titel (Conventional-Commit-Stil, ≤ 70 Zeichen)
 ## PR-Beschreibung (Markdown, Englisch: Summary, Changes, How to test, Notes)
-## Nächste Schritte (z. B. git push -u origin <branch>, PR öffnen, nächste Etappe an Vega)
+## Nächste Schritte (z. B. im Agent Store unter 📁 Projekte → 🔀 Git den Branch pushen und den PR-Link öffnen, nächste Etappe an Vega)
 
 ## Übergabe
 - Kernaussage (max. 3 Sätze)
@@ -424,17 +433,22 @@ Schichten gibt es nur pro Wochentag (kein „1. Montag im Monat“). Sie laufen 
 
 | Fall | Du schreibst an | Kette | Deine Entscheidung |
 |---|---|---|---|
-| Neues Feature | Vega: „Feature: … Kontext: … Muss: … Nicht: …“ | Vega → Otto (↺ Vega) → ⏸️ → Dex → Nova (↺ Dex) → Echo | Plan freigeben, am Ende pushen + PR |
-| Bug | Sola: „Bug: erwartet … tatsächlich … Fehlermeldung …“ | Sola → ⏸️ → Dex → Nova (↺ Dex) → Echo | Diagnose freigeben, am Ende pushen + PR |
+| Neues Feature | Vega: „Feature: … Kontext: … Muss: … Nicht: …“ | Vega → Otto (↺ Vega) → ⏸️ → Dex → Nova (↺ Dex) → Echo | Plan freigeben, am Ende 🚀 pushen + PR |
+| Bug | Sola: „Bug: erwartet … tatsächlich … Fehlermeldung …“ | Sola → ⏸️ → Dex → Nova (↺ Dex) → Echo | Diagnose freigeben, am Ende 🚀 pushen + PR |
 | Kleine Änderung | Dex direkt: „Ändere … in Datei …“ | Dex → Nova (↺ Dex) | Note < 8 nach 3 Runden → Postfach |
 | Security | Schicht Fr 16:00 | Hera → ⏸️ → Vega → Otto → ⏸️ → Dex → Nova → Echo | Funde auswählen, Plan freigeben |
 | Recherche | Max direkt | – | – |
 | Nächste Etappe | Vega: „Etappe 2 aus deiner letzten Spezifikation“ | wie Feature | – |
 
+**Commit & Push:** Die Agents committen nur lokal auf ihrem `agent/`-Branch. Gepusht wird vom Agent Store auf deinen Klick:
+📁 Projekte → Projekt → 🔀 Git-Box → **🚀 <branch> pushen** (nie force, `main` nur nach Rückfrage). Liegen noch
+unkommittete Änderungen herum (z. B. Doku, die Echo nicht committen durfte), committest du sie dort mit **✅ Alles committen**;
+Dateien mit Secrets werden dabei blockiert. Nach dem ersten Push erscheint der Link **🔗 Pull Request öffnen**.
+
 ## O. Start
 
-1. Projekt „Coding – <Repo-Name>“ anlegen, Beschreibung mit Repo-Pfad und Hauptbranch, Profil „Coding“ als Standard.
-2. Die 8 Agents im 🛒 Store als **Projekt-Agents** rekrutieren, Namen, Antrieb, Modell, Autonomie, Arbeitsordner und Basis-Prompt wie oben setzen.
+1. Projekt „Coding“ anlegen, Profil „Coding“ als Standard, aktiv setzen und mit dem 💻-Schalter das erste Repo wählen.
+2. Die 8 Agents im 🛒 Store als **Projekt-Agents** rekrutieren, Namen, Antrieb, Modell, Autonomie und Basis-Prompt wie oben setzen (Arbeitsordner leer lassen – der 💻-Schalter gilt für alle).
 3. Prüfer-Modus bei Otto (≥7, 2) und Nova (≥8, 3) einschalten, dann die Weitergaben aus Abschnitt L eintragen.
 4. Repo vorbereiten: sauberer Stand auf `main`, Tests laufen lokal.
 5. Erster Testlauf mit einer kleinen Aufgabe an Vega, z. B.:

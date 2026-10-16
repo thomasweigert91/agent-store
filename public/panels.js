@@ -333,14 +333,16 @@ async function openProjects(projectId) {
           <div class="prj-head">
             <div><h3>${esc(current.icon)} ${esc(current.name)}</h3>
               ${current.description ? `<div class="prj-desc" id="prj-desc" title="Klicken zum Auf-/Zuklappen">${esc(plainDesc(current.description))}</div>` : ''}
-              <div class="prj-path" title="Gemeinsamer Projektordner">📂 ${esc(current.path)}</div></div>
+              <div class="prj-path" title="Gemeinsamer Projektordner">📂 ${esc(current.path)}</div>
+              ${current.repo ? `<div class="prj-path" title="Codebase-Ordner (Arbeitsordner aller Agents im Projekt)">💻 ${esc(current.repo)}</div>` : ''}</div>
             <div class="prj-actions">
               ${current.id === C.S.game.activeProjectId ? '<span class="chip">★ aktiv</span>' : '<button class="btn btn-sm" id="prj-activate">★ Aktiv setzen</button>'}
               <button class="btn btn-sm" id="prj-folder">📂 Ordner</button>
               <button class="btn btn-sm" id="prj-edit">✏️</button>
               <button class="btn btn-sm btn-danger" id="prj-del">🗑</button>
             </div>
-          </div>` : `<div class="prj-head"><h3>${sel === 'none' ? '📄 Ergebnisse ohne Projekt' : '🗄️ Alle Ergebnisse'}</h3></div>`}
+          </div>
+          ${current.repo ? '<div class="git-box" id="git-box"><div class="empty-note">Git lädt…</div></div>' : ''}` : `<div class="prj-head"><h3>${sel === 'none' ? '📄 Ergebnisse ohne Projekt' : '🗄️ Alle Ergebnisse'}</h3></div>`}
         <div class="arch-tools">
           <input id="arch-q" placeholder="🔎 Volltextsuche in Aufträgen und Ergebnissen…" value="${esc(archiveView.q)}">
           <select id="arch-agent"><option value="">Alle Agents</option>${agentsSorted().map((a) => `<option value="${esc(a.id)}" ${a.id === archiveView.agentId ? 'selected' : ''}>${esc(a.avatar)} ${esc(a.name)}</option>`).join('')}</select>
@@ -358,6 +360,7 @@ async function openProjects(projectId) {
     $('#prj-desc')?.addEventListener('click', (e) => e.currentTarget.classList.toggle('open'));
     $('#prj-folder').onclick = () => C.api('POST', `/api/projects/${current.id}/open-folder`).catch((e) => C.toast(e.message, 'error'));
     $('#prj-edit').onclick = () => openProjectForm(current);
+    if (current.repo) loadGit(current);
     $('#prj-del').onclick = async () => {
       if (!confirm(`Projekt „${current.name}“ löschen? Ergebnisse bleiben im Archiv, der Ordner bleibt auf der Festplatte.`)) return;
       try { await C.api('DELETE', `/api/projects/${current.id}`); openProjects('all'); } catch (e) { C.toast(e.message, 'error'); }
@@ -367,6 +370,77 @@ async function openProjects(projectId) {
   $('#arch-q').oninput = (e) => { archiveView.q = e.target.value; clearTimeout(timer); timer = setTimeout(loadArchive, 250); };
   $('#arch-agent').onchange = (e) => { archiveView.agentId = e.target.value; loadArchive(); };
   loadArchive();
+}
+
+// Git-Box im Projekt: Stand der Codebase, Commit aller Änderungen und Push des aktuellen Branches.
+async function loadGit(project) {
+  const esc = C.esc;
+  const box = $('#git-box');
+  if (!box) return;
+  let s;
+  try {
+    s = await C.api('GET', `/api/projects/${project.id}/git`);
+  } catch (e) {
+    box.innerHTML = `<div class="git-err">🔀 ${esc(e.message)}</div>`;
+    return;
+  }
+  if (!$('#git-box')) return; // Modal inzwischen gewechselt
+  if (!s.isRepo) {
+    box.innerHTML = '<div class="empty-note">🔀 Der Codebase-Ordner ist kein Git-Repo.</div>';
+    return;
+  }
+  const sync = s.upstream
+    ? `${s.ahead ? `↑${s.ahead} ` : ''}${s.behind ? `↓${s.behind} ` : ''}${!s.ahead && !s.behind ? '✓ synchron' : ''}`
+    : 'noch nicht gepusht';
+  const files = s.files.map((f) => `<li><code>${esc(f.code)}</code> ${esc(f.path)}</li>`).join('');
+  box.innerHTML = `
+    <div class="git-row">
+      <strong>🔀 ${esc(s.branch || 'detached HEAD')}</strong>
+      ${s.protected ? '<span class="chip" title="Geschützter Branch: Push nur mit Bestätigung">🔒 geschützt</span>' : ''}
+      <span class="git-dim">${esc(sync)}</span>
+      <span class="git-dim">${s.files.length} Änderung${s.files.length === 1 ? '' : 'en'}</span>
+      <button class="btn btn-sm btn-ghost" id="git-reload" title="Neu laden">🔄</button>
+    </div>
+    ${s.files.length ? `<details class="git-files"><summary>Geänderte Dateien</summary><ul>${files}</ul></details>
+    <div class="git-row">
+      <input id="git-msg" placeholder="Commit-Nachricht, z. B. feat: add health endpoint" maxlength="2000">
+      <button class="btn btn-sm" id="git-commit">✅ Alles committen</button>
+    </div>` : ''}
+    <div class="git-row">
+      <button class="btn btn-sm btn-gold" id="git-push" ${!s.branch || !s.remote ? 'disabled' : ''}>🚀 ${esc(s.branch || '')} pushen</button>
+      <span class="git-dim">${s.remote ? esc(s.remote) : 'kein Remote „origin“'}</span>
+    </div>
+    ${s.commits.length ? `<div class="git-dim git-log">${s.commits.map((c) => `<div><code>${esc(c.hash)}</code> ${esc(c.subject)}</div>`).join('')}</div>` : ''}
+    <div id="git-out"></div>`;
+  $('#git-reload').onclick = () => loadGit(project);
+  $('#git-commit')?.addEventListener('click', async (e) => {
+    const message = $('#git-msg').value.trim();
+    if (!message) return C.toast('Bitte eine Commit-Nachricht eingeben.', 'error');
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try {
+      await C.api('POST', `/api/projects/${project.id}/git/commit`, { message });
+      loadGit(project);
+    } catch (err) {
+      C.toast(err.message, 'error'); // Nachricht bleibt stehen
+      btn.disabled = false;
+    }
+  });
+  $('#git-push').onclick = async (e) => {
+    if (s.files.length && !confirm(`${s.files.length} Änderung(en) sind noch nicht committet und werden nicht mitgepusht. Trotzdem pushen?`)) return;
+    if (s.protected && !confirm(`„${s.branch}“ ist ein geschützter Branch. Wirklich direkt nach origin/${s.branch} pushen?`)) return;
+    e.currentTarget.disabled = true;
+    e.currentTarget.textContent = '⏳ pusht…';
+    try {
+      const r = await C.api('POST', `/api/projects/${project.id}/git/push`, { confirmProtected: s.protected });
+      await loadGit(project);
+      const out = $('#git-out');
+      if (out) out.innerHTML = r.prLink ? `<a class="btn btn-sm" href="${esc(r.prLink)}" target="_blank" rel="noopener">🔗 Pull Request öffnen</a>` : '';
+    } catch (err) {
+      C.toast(err.message, 'error');
+      loadGit(project);
+    }
+  };
 }
 
 async function loadArchive() {
@@ -416,8 +490,10 @@ function openProjectForm(p = null) {
         <div class="field"><label>Symbol</label><div class="avatar-grid" id="prj-icons">${C.S.projectIcons.map((i) => `<button type="button" data-i="${esc(i)}" class="${(p?.icon || '📁') === i ? 'on' : ''}">${esc(i)}</button>`).join('')}</div></div>
         <div class="row2">
           <div class="field"><label>Farbe</label><input name="color" type="color" value="${esc(p?.color || '#60a5fa')}"></div>
-          <div class="field"><label>Eigener Projektordner (optional)</label><input name="folder" value="${esc(p?.folder || '')}" placeholder="leer = automatisch im Agent Store"></div>
+          <div class="field"><label>Eigener Projektordner (optional)</label><div style="display:flex;gap:6px"><input name="folder" value="${esc(p?.folder || '')}" placeholder="leer = automatisch im Agent Store" style="flex:1;min-width:0"><button type="button" class="btn btn-sm" data-pick="folder">📁 Wählen…</button></div></div>
         </div>
+        <div class="field"><label>Codebase-Ordner (Repo, optional)</label><div style="display:flex;gap:6px"><input name="repo" value="${esc(p?.repo || '')}" placeholder="z. B. D:\\code\\mein-tool" style="flex:1;min-width:0"><button type="button" class="btn btn-sm" data-pick="repo">📁 Wählen…</button></div>
+          <div class="help">Gesetzt = alle Aufträge in diesem Projekt laufen in diesem Ordner, egal welcher Arbeitsordner beim Agent eingetragen ist.</div></div>
         <div class="field"><label>Standard-Kontext-Profil</label><select name="profileId">${profileOptions(p?.profileId)}</select>
           <div class="help">Wird allen Aufträgen in diesem Projekt vorangestellt (pro Auftrag änderbar). Profile verwaltest du unter 🏢 Profile.</div></div>
         <div class="field"><label>Beschreibung / Kontext für die Agents</label><textarea name="description" rows="3" placeholder="z. B. Handgemachte Keramik, Zielgruppe 25–45, warmer Ton">${esc(p?.description || '')}</textarea></div>
@@ -432,10 +508,11 @@ function openProjectForm(p = null) {
     icon = b.dataset.i;
     $('#prj-icons').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
   };
+  $('#prj-form').querySelectorAll('[data-pick]').forEach((b) => (b.onclick = () => C.pickFolderInto($('#prj-form').elements[b.dataset.pick])));
   $('#prj-back').onclick = () => openProjects();
   $('#prj-save').onclick = async () => {
     const f = $('#prj-form').elements;
-    const body = { name: f.name.value, icon, color: f.color.value, folder: f.folder.value, description: f.description.value, profileId: f.profileId.value || null, activate: f.activate?.checked };
+    const body = { name: f.name.value, icon, color: f.color.value, folder: f.folder.value, repo: f.repo.value, description: f.description.value, profileId: f.profileId.value || null, activate: f.activate?.checked };
     try {
       const saved = p ? await C.api('PATCH', `/api/projects/${p.id}`, body) : await C.api('POST', '/api/projects', body);
       if (body.activate) C.S.game.activeProjectId = saved.id;

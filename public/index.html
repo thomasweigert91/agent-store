@@ -29,6 +29,11 @@
       <span>📁</span><select id="active-project"><option value="">Kein Projekt</option></select>
     </label>
 
+    <div class="folder-picker" id="folder-picker" hidden>
+      <button class="folder-btn" id="folder-btn" aria-haspopup="true" aria-expanded="false"><span>💻</span><span id="folder-name">kein Ordner</span><span class="folder-caret">▾</span></button>
+      <div class="folder-menu" id="folder-menu" hidden></div>
+    </div>
+
     <div class="energy" id="energy" hidden title="Auslastung deines Claude-Abos (wird nach jedem Claude-Auftrag aktualisiert)">
       <span class="energy-label">Claude-Abo</span>
       <div class="energy-bars" id="energy-bars"></div>

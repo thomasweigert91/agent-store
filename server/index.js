@@ -16,6 +16,8 @@ import * as progress from './progress.js';
 import * as profiles from './profiles.js';
 import * as planner from './planner.js';
 import * as inbox from './inbox.js';
+import { pickFolder } from './folders.js';
+import * as git from './git.js';
 
 // Profil-Auswahl aus Anfragen: fehlt = Standard des Projekts, leer = kein Profil, sonst ID.
 const profileOpt = (v) => (v === undefined ? undefined : v || 'none');
@@ -169,6 +171,40 @@ route('POST', '/api/projects/:id/open-folder', ({ id }) => {
   if (!p) throw notFound('Projekt nicht gefunden');
   openFolder(projects.projectFolder(p));
   return { ok: true };
+});
+// Codebase-Ordner wechseln (gilt für neue Aufträge aller Agents im Projekt) bzw. aus der Liste entfernen.
+route('PUT', '/api/projects/:id/repo', ({ id }, body) => {
+  const p = projects.setRepo(id, body.repo, { confirmRisky: body.confirmRisky === true });
+  emitProjects();
+  emit('toast', { kind: 'info', text: p.repo ? `💻 ${p.name}: Agents arbeiten ab jetzt in ${p.repo}` : `💻 ${p.name}: ohne Codebase-Ordner` });
+  return projects.publicProject(p);
+});
+route('POST', '/api/projects/:id/repo/forget', ({ id }, body) => {
+  const p = projects.forgetRepo(id, body.repo);
+  emitProjects();
+  return projects.publicProject(p);
+});
+
+// Git in der Codebase des Projekts (Status, Commit, Push – nie force).
+function projectRepo(id) {
+  const p = projects.findProject(id);
+  if (!p) throw notFound('Projekt nicht gefunden');
+  if (!p.repo) throw Object.assign(new Error('Für dieses Projekt ist kein Codebase-Ordner eingetragen.'), { status: 400 });
+  if (!fs.existsSync(p.repo)) throw Object.assign(new Error('Codebase-Ordner fehlt: ' + p.repo), { status: 400 });
+  return p;
+}
+route('GET', '/api/projects/:id/git', ({ id }) => git.status(projectRepo(id).repo));
+route('POST', '/api/projects/:id/git/commit', async ({ id }, body) => {
+  const p = projectRepo(id);
+  const c = await git.commit(p.repo, body.message);
+  emit('toast', { kind: 'info', text: `✅ ${p.name}: Commit ${c.hash} – ${c.subject}` });
+  return c;
+});
+route('POST', '/api/projects/:id/git/push', async ({ id }, body) => {
+  const p = projectRepo(id);
+  const r = await git.push(p.repo, { confirmProtected: body.confirmProtected === true });
+  emit('toast', { kind: 'quest', text: `🚀 ${p.name}: ${r.branch} gepusht` });
+  return r;
 });
 route('GET', '/api/projects/:id/export', ({ id }) => {
   const { filename, body } = projects.exportMarkdown(id);
@@ -370,6 +406,7 @@ route('POST', '/api/agents/:id/open-folder', ({ id }) => {
   openFolder(agents.agentCwd(a));
   return { ok: true };
 });
+route('POST', '/api/pick-folder', async (_, body) => ({ path: await pickFolder(typeof body.start === 'string' ? body.start.trim() : '') }));
 route('POST', '/api/broadcast', (_, body) => {
   const ids = Array.isArray(body.agentIds) ? body.agentIds : [];
   if (!ids.length) throw Object.assign(new Error('Keine Agents ausgewählt'), { status: 400 });
@@ -437,7 +474,7 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, result ?? { ok: true });
     } catch (err) {
       if (!err.status) console.error(err);
-      return sendJson(res, err.status || 500, { error: err.message || 'Serverfehler' });
+      return sendJson(res, err.status || 500, { error: err.message || 'Serverfehler', ...(err.code && err.status ? { code: err.code } : {}) });
     }
   }
 

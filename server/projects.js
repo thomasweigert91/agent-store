@@ -1,11 +1,14 @@
 // Projekte: bündeln Aufträge und Ergebnisse, mit gemeinsamem Projektordner für alle beteiligten Agents.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { state, saveState, WORKSPACES_DIR } from './store.js';
 import * as archive from './archive.js';
+import { riskyFolder, addRecent } from './folders.js';
 
 const uid = () => crypto.randomBytes(5).toString('hex');
+const MAX_RECENT_REPOS = 8;
 const ICONS = ['📁', '🛍️', '🍞', '📈', '🧪', '🎮', '🏡', '✈️', '📚', '💡', '🎨', '⚙️'];
 export const PROJECT_ICONS = ICONS;
 
@@ -44,9 +47,13 @@ function validate(body, existing = {}) {
   if (!name) throw fail(400, 'Bitte einen Projektnamen angeben.');
   const folder = String(body.folder ?? existing.folder ?? '').trim();
   if (folder && !fs.existsSync(folder)) throw fail(400, 'Projektordner existiert nicht: ' + folder);
+  const repo = String(body.repo ?? existing.repo ?? '').trim();
+  if (repo && !fs.existsSync(repo)) throw fail(400, 'Codebase-Ordner existiert nicht: ' + repo);
   return {
     name,
     folder,
+    repo,
+    recentRepos: withRecent(existing.recentRepos, repo),
     icon: ICONS.includes(body.icon) ? body.icon : existing.icon || '📁',
     color: /^#[0-9a-f]{6}$/i.test(body.color || '') ? body.color : existing.color || '#60a5fa',
     description: String(body.description ?? existing.description ?? '').slice(0, 500),
@@ -54,6 +61,41 @@ function validate(body, existing = {}) {
       ? (state.profiles.some((x) => x.id === body.profileId) ? body.profileId : null)
       : existing.profileId ?? null,
   };
+}
+
+const withRecent = (list, repo) => addRecent(list, repo, MAX_RECENT_REPOS);
+
+function systemDirs() {
+  return [process.env.SystemRoot, process.env.ProgramFiles, process.env['ProgramFiles(x86)'], process.env.ProgramData,
+    ...(process.platform === 'win32' ? [] : ['/bin', '/boot', '/dev', '/etc', '/lib', '/proc', '/sbin', '/sys', '/usr', '/var'])];
+}
+
+// Codebase-Ordner wechseln ('' = keiner). Riskante Ordner nur mit ausdrücklicher Bestätigung.
+// Laufende Aufträge und Ketten behalten ihren Ordner, der Wechsel gilt für neue Aufträge.
+export function setRepo(id, repo, { confirmRisky = false } = {}) {
+  const p = findProject(id);
+  if (!p) throw fail(404, 'Projekt nicht gefunden.');
+  const dir = String(repo || '').trim();
+  if (dir) {
+    if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) throw fail(400, 'Ordner existiert nicht: ' + dir);
+    const risk = riskyFolder(dir, { home: os.homedir(), systemDirs: systemDirs() });
+    if (risk && !confirmRisky) {
+      throw Object.assign(fail(409, `„${dir}“ ist ein riskanter Arbeitsordner (${risk}). Agents mit Schreibrechten können dort viel kaputt machen.`), { code: 'risky' });
+    }
+  }
+  p.repo = dir;
+  p.recentRepos = withRecent(p.recentRepos, dir);
+  saveState();
+  return p;
+}
+
+export function forgetRepo(id, repo) {
+  const p = findProject(id);
+  if (!p) throw fail(404, 'Projekt nicht gefunden.');
+  const dir = String(repo || '').trim().toLowerCase();
+  p.recentRepos = (p.recentRepos || []).filter((r) => r.toLowerCase() !== dir);
+  saveState();
+  return p;
 }
 
 export function createProject(body) {
@@ -89,10 +131,13 @@ export function setActiveProject(id) {
 }
 
 // Kontext, der einem Auftrag im Projekt vorangestellt wird.
-export function projectPreamble(project) {
+// `repo` ist der beim Auftrag festgehaltene Codebase-Ordner (kann vom aktuellen des Projekts abweichen).
+export function projectPreamble(project, repo = project.repo) {
   const dir = projectFolder(project);
   return `[Projekt „${project.name}“${project.description ? ` – ${project.description}` : ''}]\n`
     + `Gemeinsamer Projektordner aller beteiligten Agents: ${dir}\n`
+    + (repo ? `Codebase dieses Auftrags (dein Arbeitsordner): ${repo}\n`
+      + 'Ergebnisdateien tragen eine Zeile „Codebase: …“ – nutze nur Ergebnisse mit derselben Codebase.\n' : '')
     + `Ergebnisse der anderen Agents liegen dort unter "ergebnisse/". Lege projektbezogene Dateien in diesem Ordner ab.\n\n`;
 }
 
@@ -114,6 +159,7 @@ function entryMarkdown(e) {
   const when = new Date(e.ts).toLocaleString('de-DE');
   return `## ${e.agentAvatar || ''} ${e.agentName} (${e.archetypeTitle}) · ${when}\n\n`
     + `**Auftrag:**\n\n> ${e.prompt.replace(/\n/g, '\n> ')}\n\n`
+    + `${e.repo ? `Codebase: ${e.repo}\n\n` : ''}`
     + `${e.score != null ? `**Prüfnote:** ${e.score}/10\n\n` : ''}`
     + `${e.text}\n`;
 }

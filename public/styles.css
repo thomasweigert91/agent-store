@@ -594,6 +594,37 @@ main { position: relative; z-index: 1; flex: 1; padding: 22px; }
 .project-picker.active { border-color: var(--pc); box-shadow: 0 0 0 1px color-mix(in srgb, var(--pc) 40%, transparent); }
 .project-picker select { background: transparent; border: none; outline: none; font-weight: 600; max-width: 180px; cursor: pointer; }
 .project-picker select option, .mini-select option { background: var(--bg2); }
+.folder-picker { position: relative; }
+.folder-btn {
+  display: flex; align-items: center; gap: 6px; max-width: 220px;
+  padding: 6px 10px; border-radius: 999px; cursor: pointer;
+  background: var(--panel); border: 1px dashed var(--line2); color: var(--muted); font: inherit; font-weight: 600;
+}
+.folder-btn #folder-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-picker.set .folder-btn { border-style: solid; border-color: var(--green); color: var(--text); }
+.folder-btn:hover { border-color: var(--gold); }
+.folder-caret { font-size: 10px; color: var(--dim); }
+.folder-menu {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 60; width: min(420px, 90vw);
+  background: var(--panel2); border: 1px solid var(--line2); border-radius: 12px; box-shadow: var(--shadow);
+  padding: 6px; display: flex; flex-direction: column; gap: 2px;
+}
+.folder-menu-head { padding: 6px 8px 8px; font-size: 12px; }
+.folder-menu-head small { display: block; color: var(--muted); margin-top: 2px; }
+.folder-item { display: flex; align-items: stretch; border-radius: 8px; }
+.folder-item:hover, .folder-action:hover { background: rgba(255, 255, 255, .06); }
+.folder-item.on { background: color-mix(in srgb, var(--green) 14%, transparent); }
+.folder-item > button:first-child {
+  flex: 1; min-width: 0; display: grid; grid-template-columns: 16px 1fr; column-gap: 6px; text-align: left;
+  padding: 6px 8px; background: none; border: none; color: var(--text); font: inherit; cursor: pointer;
+}
+.folder-item small { grid-column: 2; color: var(--dim); font-family: var(--mono); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-check { color: var(--green); grid-row: span 2; }
+.folder-forget { background: none; border: none; color: var(--dim); cursor: pointer; padding: 0 10px; border-radius: 8px; }
+.folder-forget:hover { color: var(--red); }
+.folder-empty { padding: 6px 8px; color: var(--dim); font-size: 12px; }
+.folder-sep { height: 1px; background: var(--line); margin: 4px 0; }
+.folder-action { text-align: left; padding: 7px 8px; background: none; border: none; border-radius: 8px; color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
 .mini-select { padding: 5px 8px; border-radius: 8px; border: 1px solid var(--line2); background: #0b1024; font-size: 12px; max-width: 190px; }
 
 .chip.proj { --pc: var(--line2); color: var(--text); border-color: color-mix(in srgb, var(--pc) 70%, transparent); background: color-mix(in srgb, var(--pc) 14%, transparent); }
@@ -686,6 +717,15 @@ main { position: relative; z-index: 1; flex: 1; padding: 22px; }
 .prj-desc.open { display: block; -webkit-line-clamp: unset; max-height: 260px; overflow: auto; }
 .prj-path { font-family: var(--mono); font-size: 11px; color: var(--dim); word-break: break-all; }
 .prj-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.git-box { border: 1px solid var(--line); border-radius: 10px; background: var(--bg2); padding: 8px 10px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
+.git-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.git-row input { flex: 1; min-width: 180px; padding: 6px 9px; border-radius: 8px; border: 1px solid var(--line2); background: #0b1024; color: var(--text); font: inherit; outline: none; }
+.git-row input:focus { border-color: var(--gold); }
+.git-dim { color: var(--muted); font-family: var(--mono); font-size: 11px; word-break: break-all; }
+.git-files summary { cursor: pointer; color: var(--muted); }
+.git-files ul { margin: 4px 0 0; padding-left: 18px; max-height: 140px; overflow: auto; font-family: var(--mono); font-size: 11px; }
+.git-log { display: flex; flex-direction: column; gap: 1px; }
+.git-err { color: var(--red); }
 .arch-tools { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
 .arch-tools input { flex: 1; min-width: 200px; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--line2); background: #0b1024; outline: none; }
 .arch-tools input:focus { border-color: var(--gold); }
