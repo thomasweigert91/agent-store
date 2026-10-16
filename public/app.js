@@ -30,6 +30,14 @@ const MAX = 10;
 const $ = (sel, root = document) => root.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+// Windows-Dialog „Ordner auswählen“ über den Server; der gewählte Pfad landet im Feld (gespeichert wird erst mit „Speichern“).
+async function pickFolderInto(input) {
+  try {
+    const { path } = await api('POST', '/api/pick-folder', { start: input.value.trim() });
+    if (path) input.value = path;
+  } catch (err) { toast(err.message, 'error'); }
+}
+
 async function api(method, url, body) {
   const res = await fetch(url, {
     method,
@@ -722,8 +730,8 @@ function renderGear() {
       </div>
       <div class="field">
         <label>Arbeitsordner</label>
-        <input name="workdir" value="${esc(a.workdir)}" placeholder="${esc(a.cwd)}">
-        <div class="help">Leer = eigener Ordner im Projekt. Du kannst z. B. <code>D:\\mein-projekt</code> eintragen, damit ein Coder direkt dort arbeitet.</div>
+        <div style="display:flex;gap:6px"><input name="workdir" value="${esc(a.workdir)}" placeholder="${esc(a.cwd)}" style="flex:1;min-width:0"><button type="button" class="btn btn-sm" id="pick-workdir">📁 Wählen…</button></div>
+        <div class="help">Leer = eigener Ordner im Projekt. Du kannst z. B. <code>D:\\mein-projekt</code> eintragen, damit ein Coder direkt dort arbeitet. In Projekten mit Codebase-Ordner arbeitet der Agent dort.</div>
       </div>
       <div class="row2">
         <div class="field">
@@ -826,6 +834,7 @@ function renderGear() {
     syncModel(np, np.defaultModel || '');
     $('#prov-help').textContent = np.available ? (np.version || 'bereit') : (np.hint || '');
   };
+  $('#pick-workdir').onclick = () => pickFolderInto($('#gear-form').elements.workdir);
   $('#gear-form').onsubmit = async (e) => {
     e.preventDefault();
     const f = new FormData(e.target);
@@ -1316,7 +1325,7 @@ document.addEventListener('keydown', (e) => {
   grip.addEventListener('dblclick', () => { apply(0); try { localStorage.removeItem('drawerW'); } catch { /* egal */ } });
 })();
 
-const panels = initPanels({ S, api, openModal, closeModal, toast, esc, renderMarkdown, providerShort, fmtDuration, fmtTime });
+const panels = initPanels({ S, api, openModal, closeModal, toast, pickFolderInto, esc, renderMarkdown, providerShort, fmtDuration, fmtTime });
 initFloor();
 renderFloor();
 connect();

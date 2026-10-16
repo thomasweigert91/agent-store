@@ -16,6 +16,7 @@ import * as progress from './progress.js';
 import * as profiles from './profiles.js';
 import * as planner from './planner.js';
 import * as inbox from './inbox.js';
+import { pickFolder } from './folders.js';
 
 // Profil-Auswahl aus Anfragen: fehlt = Standard des Projekts, leer = kein Profil, sonst ID.
 const profileOpt = (v) => (v === undefined ? undefined : v || 'none');
@@ -370,6 +371,7 @@ route('POST', '/api/agents/:id/open-folder', ({ id }) => {
   openFolder(agents.agentCwd(a));
   return { ok: true };
 });
+route('POST', '/api/pick-folder', async (_, body) => ({ path: await pickFolder(typeof body.start === 'string' ? body.start.trim() : '') }));
 route('POST', '/api/broadcast', (_, body) => {
   const ids = Array.isArray(body.agentIds) ? body.agentIds : [];
   if (!ids.length) throw Object.assign(new Error('Keine Agents ausgewählt'), { status: 400 });

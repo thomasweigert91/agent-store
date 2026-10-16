@@ -416,7 +416,7 @@ function openProjectForm(p = null) {
         <div class="field"><label>Symbol</label><div class="avatar-grid" id="prj-icons">${C.S.projectIcons.map((i) => `<button type="button" data-i="${esc(i)}" class="${(p?.icon || '📁') === i ? 'on' : ''}">${esc(i)}</button>`).join('')}</div></div>
         <div class="row2">
           <div class="field"><label>Farbe</label><input name="color" type="color" value="${esc(p?.color || '#60a5fa')}"></div>
-          <div class="field"><label>Eigener Projektordner (optional)</label><input name="folder" value="${esc(p?.folder || '')}" placeholder="leer = automatisch im Agent Store"></div>
+          <div class="field"><label>Eigener Projektordner (optional)</label><div style="display:flex;gap:6px"><input name="folder" value="${esc(p?.folder || '')}" placeholder="leer = automatisch im Agent Store" style="flex:1;min-width:0"><button type="button" class="btn btn-sm" data-pick="folder">📁 Wählen…</button></div></div>
         </div>
         <div class="field"><label>Standard-Kontext-Profil</label><select name="profileId">${profileOptions(p?.profileId)}</select>
           <div class="help">Wird allen Aufträgen in diesem Projekt vorangestellt (pro Auftrag änderbar). Profile verwaltest du unter 🏢 Profile.</div></div>
@@ -432,6 +432,7 @@ function openProjectForm(p = null) {
     icon = b.dataset.i;
     $('#prj-icons').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
   };
+  $('#prj-form').querySelectorAll('[data-pick]').forEach((b) => (b.onclick = () => C.pickFolderInto($('#prj-form').elements[b.dataset.pick])));
   $('#prj-back').onclick = () => openProjects();
   $('#prj-save').onclick = async () => {
     const f = $('#prj-form').elements;
