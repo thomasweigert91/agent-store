@@ -16,6 +16,7 @@ import * as progress from './progress.js';
 import * as profiles from './profiles.js';
 import * as planner from './planner.js';
 import * as inbox from './inbox.js';
+import { healthInfo } from './health.js';
 
 // Profil-Auswahl aus Anfragen: fehlt = Standard des Projekts, leer = kein Profil, sonst ID.
 const profileOpt = (v) => (v === undefined ? undefined : v || 'none');
@@ -128,6 +129,7 @@ const route = (method, pattern, handler) => {
 };
 
 route('GET', '/api/state', () => fullState());
+route('GET', '/api/health', () => healthInfo());
 
 const notFound = (msg) => Object.assign(new Error(msg), { status: 404 });
 const emitProjects = () => emit('projects', projects.listProjects());
