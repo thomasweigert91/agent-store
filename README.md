@@ -20,6 +20,7 @@ Angetrieben wird das Ganze von deinen **Abos**:
 ## 🚀 Schnellstart
 
 Voraussetzung: **Node.js 20.6+** (getestet mit Node 24). Es gibt **keine npm-Abhängigkeiten**.
+Tests laufen mit `npm test` (eingebauter Test-Runner `node --test`, braucht Node 21+).
 
 1. **Claude-Abo verbinden** – Claude Code ist bei dir bereits installiert. Falls du noch nicht eingeloggt bist:
    `claude-login.bat` doppelklicken, anmelden, mit `/exit` beenden.
@@ -211,6 +212,7 @@ agent-store/
 │  ├─ profiles.js           Kontext-Profile, gelernte Vorlieben
 │  ├─ planner.js            Planer-Einträge, Entwurf-Verknüpfung, „Mehrere planen“
 │  ├─ inbox.js              Postfach, Abschnitts-Erkennung, Limit-Prüfung, Aktionen
+│  ├─ health.js             Healthcheck für `GET /api/health` (ok + Version)
 │  └─ providers/
 │     ├─ claudeCli.js       claude -p --output-format stream-json (Session via --resume)
 │     ├─ antigravityCli.js  agy --print --output-format stream-json (Gedächtnis via --conversation)
@@ -250,6 +252,7 @@ API-Keys liegen nur lokal in `data/settings.json` bzw. `.env`.
 | Methode | Pfad | Zweck |
 |---|---|---|
 | GET | `/api/state` | Gesamter Zustand (Agents, Münzen, Katalog, Antriebe) |
+| GET | `/api/health` | Lebenszeichen + Version `{ok, version}` |
 | GET | `/api/events` | SSE-Stream: `agent`, `delta`, `activity`, `questDone`, `game`, `limits`, … |
 | POST | `/api/agents` | Rekrutieren `{archetypeId, provider?, model?, slot?}` |
 | PATCH/DELETE | `/api/agents/:id` | Ausrüstung ändern (inkl. `relay`, `review`, `talentsOff`, `look`) / entlassen |
