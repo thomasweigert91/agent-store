@@ -3,3 +3,7 @@ data/
 workspaces/
 .env
 *.log
+
+# Private Notizen und lokale Verknuepfungen
+docs/privat/
+*.lnk
