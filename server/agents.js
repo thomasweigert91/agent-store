@@ -239,6 +239,7 @@ export function updateAgent(id, patch) {
   if (typeof patch.name === 'string' && patch.name.trim()) agent.name = patch.name.trim().slice(0, 24);
   if (typeof patch.avatar === 'string' && patch.avatar.trim()) agent.avatar = patch.avatar.trim().slice(0, 8);
   if (typeof patch.persona === 'string') agent.persona = patch.persona.slice(0, 20000);
+  if (typeof patch.blurb === 'string') agent.blurb = patch.blurb.trim().slice(0, 200);
   if (patch.look && typeof patch.look === 'object') {
     const idx = (v) => (Number.isInteger(v) && v >= 0 && v < 16 ? v : 0);
     agent.look = { hair: idx(patch.look.hair), hairColor: idx(patch.look.hairColor), skin: idx(patch.look.skin), acc: idx(patch.look.acc) };
@@ -271,6 +272,7 @@ export function updateAgent(id, patch) {
       toAgentId: target.id,
       instruction: String(patch.relay.instruction || '').trim().slice(0, 2000),
       requireApproval: Boolean(patch.relay.requireApproval),
+      chainOnly: Boolean(patch.relay.chainOnly),
     };
   }
   if (patch.review && typeof patch.review === 'object') {
@@ -668,7 +670,8 @@ function relayResult(agent, task, msg, override = {}) {
   const relay = agent.relay;
   const target = relay?.toAgentId ? findAgent(relay.toAgentId) : null;
   if (relay?.toAgentId && !target) agent.relay = null;
-  if (!target) {
+  // "Nur innerhalb einer Kette": direkte Aufträge (ohne Übergabe von einem anderen Agent) enden hier.
+  if (!target || (relay.chainOnly && !task.from)) {
     if (task.chainId) bump('chains');
     return false;
   }

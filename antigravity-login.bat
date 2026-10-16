@@ -9,8 +9,11 @@ echo.
 set "AGY=agy"
 where agy >nul 2>nul
 if errorlevel 1 set "AGY=%USERPROFILE%\.gemini\bin\agy.exe"
+if not "%AGY%"=="agy" if not exist "%AGY%" set "AGY=%LOCALAPPDATA%\agy\bin\agy.exe"
+if not "%AGY%"=="agy" if not exist "%AGY%" set "AGY=%LOCALAPPDATA%\Antigravity\agy.exe"
 if not exist "%AGY%" if not "%AGY%"=="agy" (
-  echo Antigravity CLI nicht gefunden. Bitte von https://antigravity.google installieren.
+  echo Antigravity CLI ^(agy^) nicht gefunden - die Desktop-App allein reicht nicht.
+  echo In PowerShell installieren:  irm https://antigravity.google/cli/install.ps1 ^| iex
   pause
   exit /b 1
 )

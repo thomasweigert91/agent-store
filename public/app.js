@@ -390,7 +390,7 @@ function updateDesk(a) {
   const relayTo = a.relay?.toAgentId ? S.agents.get(a.relay.toAgentId) : null;
   r.relay.hidden = !relayTo;
   r.relay.textContent = relayTo ? `🔗 → ${relayTo.name}` : '';
-  r.relay.title = relayTo ? `Ergebnisse gehen automatisch an ${relayTo.name}${a.relay.instruction ? ': ' + a.relay.instruction : ''}${a.relay.requireApproval ? ' (nach deiner Freigabe)' : ''}` : '';
+  r.relay.title = relayTo ? `Ergebnisse gehen automatisch an ${relayTo.name}${a.relay.instruction ? ': ' + a.relay.instruction : ''}${a.relay.requireApproval ? ' (nach deiner Freigabe)' : ''}${a.relay.chainOnly ? ' – nur innerhalb einer Kette, direkte Fragen bleiben hier' : ''}` : '';
   if (relayTo && a.relay.requireApproval) r.relay.textContent += ' ⏸️';
   if (a.review?.enabled) { r.relay.hidden = false; r.relay.textContent = `🧐 ≥${a.review.minScore}${relayTo ? ` · → ${relayTo.name}` : ''}`; r.relay.title = `Prüfer-Modus: gibt ab Note ${a.review.minScore}/10 frei, max. ${a.review.maxRounds} Runden` + (relayTo ? `, danach weiter an ${relayTo.name}` : ''); }
   r.shift.hidden = !a.nextShift;
@@ -408,9 +408,9 @@ function updateDesk(a) {
   r.name.textContent = a.name;
   r.role.textContent = `${a.avatar} ${a.archetypeTitle}`;
   r.cls.textContent = `${a.levelTitle} · ${a.questsDone} ✔`;
-  const purpose = a.archetypeBlurb || '';
+  const purpose = a.blurb || a.archetypeBlurb || '';
   r.purpose.textContent = purpose;
-  r.purpose.title = a.archetypeBlurb || '';
+  r.purpose.title = purpose;
   const pct = Math.round(((a.xp - a.xpFrom) / Math.max(1, a.xpTo - a.xpFrom)) * 100);
   r.xpFill.style.width = `${Math.min(100, Math.max(0, pct))}%`;
   r.xpFill.parentElement.title = `${a.xp} / ${a.xpTo} XP bis Level ${a.level + 1}`;
@@ -679,6 +679,11 @@ function renderGear() {
         <div class="field"><label>Platz (in diesem Büro)</label><select name="slot">${Array.from({ length: MAX }, (_, i) => `<option value="${i}" ${i === a.slot ? 'selected' : ''}>Schreibtisch ${i + 1}</option>`).join('')}</select></div>
       </div>
       <div class="field">
+        <label>Beschreibung (auf dem Schreibtisch)</label>
+        <input name="blurb" value="${esc(a.blurb || '')}" maxlength="200" placeholder="${esc(a.archetypeBlurb || '')}">
+        <div class="help">Kurz, wofür dieser Agent zuständig ist. Leer = Standardtext der Klasse.</div>
+      </div>
+      <div class="field">
         <label>Aussehen</label>
         <div class="look-editor">
           <div class="look-preview"><canvas id="look-preview"></canvas></div>
@@ -705,9 +710,9 @@ function renderGear() {
         </div>
         <div class="field">
           <label>Modell</label>
-          <input name="model" id="gear-model" list="model-list" value="${esc(a.model)}" placeholder="leer = Standard des Anbieters">
-          <datalist id="model-list">${(p.modelSuggestions || []).map((m) => `<option value="${esc(m)}">`).join('')}</datalist>
-          <div class="help">Claude-Abo: <code>sonnet</code>, <code>opus</code>, <code>haiku</code> · Gemini-Abo: z. B. <code>gemini-3.1-pro-high</code> (Vorschläge im Feld)</div>
+          <select id="gear-model-sel"></select>
+          <input name="model" id="gear-model" value="${esc(a.model)}" placeholder="Modellname eintragen" style="margin-top:6px">
+          <div class="help">„Standard“ = Voreinstellung des Anbieters. Nicht in der Liste? „Eigenes Modell …“ wählen und den Namen eintippen.</div>
         </div>
       </div>
       <div class="field">
@@ -730,6 +735,7 @@ function renderGear() {
           <label>Anweisung für die Weitergabe</label>
           <input name="relayInstruction" value="${esc(a.relay?.instruction || '')}" placeholder="z. B. Schreib daraus einen Blogpost.">
           <label class="toggle" style="margin-top:8px"><input type="checkbox" name="relayApproval" ${a.relay?.requireApproval ? 'checked' : ''}> ⏸️ Vorher auf meine Freigabe warten</label>
+          <label class="toggle" style="margin-top:4px"><input type="checkbox" name="relayChainOnly" ${a.relay?.chainOnly ? 'checked' : ''}> 🔗 Nur innerhalb einer Kette weitergeben (direkte Fragen von mir bleiben hier)</label>
         </div>
       </div>
       <div class="field gear-box">
@@ -794,10 +800,30 @@ function renderGear() {
     avatar = b.dataset.av;
     $('#avatar-grid').querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
   };
+  // Modell: echtes Auswahlfeld (eine datalist filtert nach dem aktuellen Wert und
+  // zeigt dann keine anderen Vorschläge mehr) plus Freitext für eigene Modelle.
+  const syncModel = (prov, model) => {
+    const list = prov.modelSuggestions || [];
+    const custom = Boolean(model) && !list.includes(model);
+    $('#gear-model-sel').innerHTML = [
+      `<option value="">Standard${prov.defaultModel ? ` (${esc(prov.defaultModel)})` : ''}</option>`,
+      ...list.map((m) => `<option value="${esc(m)}">${esc(m)}</option>`),
+      '<option value="__custom">✏️ Eigenes Modell …</option>',
+    ].join('');
+    $('#gear-model-sel').value = custom ? '__custom' : model || '';
+    $('#gear-model').value = model || '';
+    $('#gear-model').hidden = !custom;
+  };
+  syncModel(p, a.model);
+  $('#gear-model-sel').onchange = (e) => {
+    const custom = e.target.value === '__custom';
+    $('#gear-model').hidden = !custom;
+    $('#gear-model').value = custom ? '' : e.target.value;
+    if (custom) $('#gear-model').focus();
+  };
   $('#gear-provider').onchange = (e) => {
     const np = S.providers[e.target.value] || {};
-    $('#model-list').innerHTML = (np.modelSuggestions || []).map((m) => `<option value="${esc(m)}">`).join('');
-    $('#gear-model').value = np.defaultModel || '';
+    syncModel(np, np.defaultModel || '');
     $('#prov-help').textContent = np.available ? (np.version || 'bereit') : (np.hint || '');
   };
   $('#gear-form').onsubmit = async (e) => {
@@ -816,7 +842,8 @@ function renderGear() {
         autonomy: f.get('autonomy'),
         workdir: f.get('workdir'),
         persona: f.get('persona'),
-        relay: f.get('relayTo') ? { toAgentId: f.get('relayTo'), instruction: f.get('relayInstruction'), requireApproval: f.get('relayApproval') === 'on' } : null,
+        blurb: f.get('blurb'),
+        relay: f.get('relayTo') ? { toAgentId: f.get('relayTo'), instruction: f.get('relayInstruction'), requireApproval: f.get('relayApproval') === 'on', chainOnly: f.get('relayChainOnly') === 'on' } : null,
         review: { enabled: f.get('reviewEnabled') === 'on', minScore: Number(f.get('reviewMin')), maxRounds: Number(f.get('reviewRounds')) },
         talentsOff: S.talentCatalog.filter((t) => a.level >= t.level && !f.getAll('talent').includes(t.id)).map((t) => t.id),
       });

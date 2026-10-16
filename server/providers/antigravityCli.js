@@ -30,6 +30,8 @@ async function resolveAgy() {
     path.join(os.homedir(), '.gemini', 'bin', EXE),
     path.join(os.homedir(), '.local', 'bin', EXE), // Linux-Installer (install.sh)
     path.join(process.env.LOCALAPPDATA || '', 'Programs', 'antigravity', 'bin', EXE),
+    path.join(process.env.LOCALAPPDATA || '', 'agy', 'bin', EXE), // Windows-Installer (install.ps1)
+    path.join(process.env.LOCALAPPDATA || '', 'Antigravity', EXE),
   ];
   return candidates.find((c) => fs.existsSync(c)) || null;
 }
@@ -37,7 +39,7 @@ async function resolveAgy() {
 export async function detect() {
   agyPath = await resolveAgy();
   if (!agyPath) {
-    return { available: false, hint: 'Antigravity CLI (agy) nicht gefunden. Installieren über https://antigravity.google und einmal "agy" starten und mit Google anmelden.' };
+    return { available: false, hint: 'Antigravity CLI (agy) nicht gefunden – die Antigravity-Desktop-App allein reicht nicht. In PowerShell installieren: irm https://antigravity.google/cli/install.ps1 | iex – danach antigravity-login.bat starten und mit Google anmelden.' };
   }
   const v = await execQuick(agyPath, ['--version']);
   if (!v.ok) return { available: false, hint: 'agy gefunden, startet aber nicht: ' + (v.stderr || v.err?.message || '').slice(0, 200) };
