@@ -5,6 +5,9 @@ Schreibtische im Hauptquartier und gibst ihnen Aufträge. Alle können **gleichz
 siehst live, was jeder gerade tut. Erledigte Aufträge bringen Münzen und XP, damit levelst du dein Team
 und kaufst neue Spezialisten.
 
+<img width="2522" height="1117" alt="image" src="https://github.com/user-attachments/assets/a480a685-d80e-468e-a75b-a65bd9e55784" />
+
+
 Angetrieben wird das Ganze von deinen **Abos**:
 
 | Antrieb | Wie | Kosten |
