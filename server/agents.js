@@ -13,6 +13,7 @@ import { nextShiftFor, removeAgentSchedules } from './scheduler.js';
 import { findProfile, profilePreamble, resolveProfileId } from './profiles.js';
 import { linkResult, clearPending as clearPlanPending, removeAgent as removePlanAgent } from './planner.js';
 import { fileBlockHint, saveFileBlocks } from './fileblocks.js';
+import { resolveWorkdir } from './folders.js';
 
 export const MAX_AGENTS = 10;        // Plätze pro Büro
 const MAX_TOTAL_AGENTS = 60;         // Agents insgesamt (alle Projekte)
@@ -102,6 +103,15 @@ export function agentCwd(agent) {
   const dir = agent.workdir && fs.existsSync(agent.workdir) ? agent.workdir : workspaceFor(agent);
   fs.mkdirSync(dir, { recursive: true });
   return dir;
+}
+
+// Ordner eines Auftrags: Codebase des Projekts hat Vorrang. Nur der eigene Ordner wird angelegt.
+function taskCwd(agent, project) {
+  const fallback = workspaceFor(agent);
+  const { cwd, error } = resolveWorkdir({ repo: project?.repo, workdir: agent.workdir, fallback, exists: fs.existsSync });
+  if (error) throw new Error(error);
+  if (cwd === fallback) fs.mkdirSync(cwd, { recursive: true });
+  return cwd;
 }
 
 // Öffentliche Sicht auf einen Agent (inkl. Live-Infos und Level-Daten).
@@ -554,6 +564,11 @@ async function execute(agent) {
 
   try {
     if (!provider) throw new Error('Unbekannter Provider: ' + agent.provider);
+    const cwd = taskCwd(agent, project);
+    // Claude-Sessions hängen am Ordner: anderer Ordner als beim letzten Lauf = neue Session.
+    const prevCwd = agent.sessionCwd ?? agentCwd(agent);
+    if (agent.sessionId && prevCwd !== cwd) agent.sessionId = null;
+    agent.sessionCwd = cwd;
     // Darf der Agent selbst Dateien schreiben? Sonst übernimmt der Agent Store das über Dateiblöcke.
     const canWrite = agent.provider.endsWith('-cli') && agent.autonomy !== 'safe';
     const writeHint = canWrite || reviewMode ? '' : fileBlockHint(project ? `Projektordner „${project.name}“` : 'Arbeitsordner');
@@ -563,7 +578,7 @@ async function execute(agent) {
       persona: personaWithTalents(agent) + (!agent.projectId && project && agent.projectPrompts?.[project.id]
         ? `\n\nZusätzlich im Projekt „${project.name}“:\n${agent.projectPrompts[project.id]}` : ''),
       history,
-      cwd: agentCwd(agent),
+      cwd,
       extraDirs: project ? [projectFolder(project)] : [],
       signal: ac.signal,
       onEvent,
@@ -584,7 +599,7 @@ async function execute(agent) {
         ...(reviewMode ? { score, minScore: agent.review.minScore, round: task.round || 1 } : {}),
       },
     });
-    const files = saveFileBlocks(text, project ? [projectFolder(project), agentCwd(agent)] : [agentCwd(agent)]);
+    const files = saveFileBlocks(text, project ? [projectFolder(project), cwd] : [cwd]);
     if (files.saved.length) addMessage(agent, { role: 'system', text: `💾 Gespeichert im ${project ? `Projektordner „${project.name}“` : 'Arbeitsordner'}: ${files.saved.join(', ')}` });
     if (files.rejected.length) addMessage(agent, { role: 'error', text: `Datei nicht gespeichert: ${files.rejected.join('; ')}` });
     agent.status = 'done';

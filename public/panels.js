@@ -333,7 +333,8 @@ async function openProjects(projectId) {
           <div class="prj-head">
             <div><h3>${esc(current.icon)} ${esc(current.name)}</h3>
               ${current.description ? `<div class="prj-desc" id="prj-desc" title="Klicken zum Auf-/Zuklappen">${esc(plainDesc(current.description))}</div>` : ''}
-              <div class="prj-path" title="Gemeinsamer Projektordner">📂 ${esc(current.path)}</div></div>
+              <div class="prj-path" title="Gemeinsamer Projektordner">📂 ${esc(current.path)}</div>
+              ${current.repo ? `<div class="prj-path" title="Codebase-Ordner (Arbeitsordner aller Agents im Projekt)">💻 ${esc(current.repo)}</div>` : ''}</div>
             <div class="prj-actions">
               ${current.id === C.S.game.activeProjectId ? '<span class="chip">★ aktiv</span>' : '<button class="btn btn-sm" id="prj-activate">★ Aktiv setzen</button>'}
               <button class="btn btn-sm" id="prj-folder">📂 Ordner</button>
@@ -418,6 +419,8 @@ function openProjectForm(p = null) {
           <div class="field"><label>Farbe</label><input name="color" type="color" value="${esc(p?.color || '#60a5fa')}"></div>
           <div class="field"><label>Eigener Projektordner (optional)</label><div style="display:flex;gap:6px"><input name="folder" value="${esc(p?.folder || '')}" placeholder="leer = automatisch im Agent Store" style="flex:1;min-width:0"><button type="button" class="btn btn-sm" data-pick="folder">📁 Wählen…</button></div></div>
         </div>
+        <div class="field"><label>Codebase-Ordner (Repo, optional)</label><div style="display:flex;gap:6px"><input name="repo" value="${esc(p?.repo || '')}" placeholder="z. B. D:\\code\\mein-tool" style="flex:1;min-width:0"><button type="button" class="btn btn-sm" data-pick="repo">📁 Wählen…</button></div>
+          <div class="help">Gesetzt = alle Aufträge in diesem Projekt laufen in diesem Ordner, egal welcher Arbeitsordner beim Agent eingetragen ist.</div></div>
         <div class="field"><label>Standard-Kontext-Profil</label><select name="profileId">${profileOptions(p?.profileId)}</select>
           <div class="help">Wird allen Aufträgen in diesem Projekt vorangestellt (pro Auftrag änderbar). Profile verwaltest du unter 🏢 Profile.</div></div>
         <div class="field"><label>Beschreibung / Kontext für die Agents</label><textarea name="description" rows="3" placeholder="z. B. Handgemachte Keramik, Zielgruppe 25–45, warmer Ton">${esc(p?.description || '')}</textarea></div>
@@ -436,7 +439,7 @@ function openProjectForm(p = null) {
   $('#prj-back').onclick = () => openProjects();
   $('#prj-save').onclick = async () => {
     const f = $('#prj-form').elements;
-    const body = { name: f.name.value, icon, color: f.color.value, folder: f.folder.value, description: f.description.value, profileId: f.profileId.value || null, activate: f.activate?.checked };
+    const body = { name: f.name.value, icon, color: f.color.value, folder: f.folder.value, repo: f.repo.value, description: f.description.value, profileId: f.profileId.value || null, activate: f.activate?.checked };
     try {
       const saved = p ? await C.api('PATCH', `/api/projects/${p.id}`, body) : await C.api('POST', '/api/projects', body);
       if (body.activate) C.S.game.activeProjectId = saved.id;

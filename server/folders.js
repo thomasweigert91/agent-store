@@ -63,3 +63,11 @@ export function pickFolder(start = '') {
     });
   });
 }
+
+// Wirksamer Ordner eines Auftrags: Codebase des Projekts vor Arbeitsordner des Agents, sonst Fallback.
+// Fehlt die Codebase, gibt es bewusst keinen Rückfall (Auftrag soll nicht im falschen Repo laufen).
+export function resolveWorkdir({ repo, workdir, fallback, exists }) {
+  if (repo) return exists(repo) ? { cwd: repo } : { error: 'Codebase-Ordner fehlt: ' + repo };
+  if (workdir && exists(workdir)) return { cwd: workdir };
+  return { cwd: fallback };
+}

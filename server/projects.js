@@ -44,9 +44,12 @@ function validate(body, existing = {}) {
   if (!name) throw fail(400, 'Bitte einen Projektnamen angeben.');
   const folder = String(body.folder ?? existing.folder ?? '').trim();
   if (folder && !fs.existsSync(folder)) throw fail(400, 'Projektordner existiert nicht: ' + folder);
+  const repo = String(body.repo ?? existing.repo ?? '').trim();
+  if (repo && !fs.existsSync(repo)) throw fail(400, 'Codebase-Ordner existiert nicht: ' + repo);
   return {
     name,
     folder,
+    repo,
     icon: ICONS.includes(body.icon) ? body.icon : existing.icon || '📁',
     color: /^#[0-9a-f]{6}$/i.test(body.color || '') ? body.color : existing.color || '#60a5fa',
     description: String(body.description ?? existing.description ?? '').slice(0, 500),
@@ -93,6 +96,7 @@ export function projectPreamble(project) {
   const dir = projectFolder(project);
   return `[Projekt „${project.name}“${project.description ? ` – ${project.description}` : ''}]\n`
     + `Gemeinsamer Projektordner aller beteiligten Agents: ${dir}\n`
+    + (project.repo ? `Codebase (Arbeitsordner aller Agents in diesem Projekt): ${project.repo}\n` : '')
     + `Ergebnisse der anderen Agents liegen dort unter "ergebnisse/". Lege projektbezogene Dateien in diesem Ordner ab.\n\n`;
 }
 
