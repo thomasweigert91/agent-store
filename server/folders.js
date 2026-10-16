@@ -37,11 +37,18 @@ export function pickFolder(start = '') {
   picking = true;
   return new Promise((resolve, reject) => {
     const encoded = Buffer.from(pickFolderScript(), 'utf16le').toString('base64');
-    const child = spawn('powershell.exe', ['-NoProfile', '-STA', '-EncodedCommand', encoded], {
-      windowsHide: true,
-      env: { ...process.env, AGENT_STORE_PICK_START: String(start || '') },
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    let child;
+    try {
+      child = spawn('powershell.exe', ['-NoProfile', '-STA', '-EncodedCommand', encoded], {
+        windowsHide: true,
+        env: { ...process.env, AGENT_STORE_PICK_START: String(start || '') },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    } catch (e) {
+      // spawn wirft synchron (z. B. NUL-Byte im Startpfad) – Sperre sofort wieder freigeben.
+      picking = false;
+      return reject(fail(400, 'Ordnerauswahl nicht möglich: ' + e.message));
+    }
     let out = '';
     let err = '';
     let settled = false;

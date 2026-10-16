@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { pickFolderScript, resolveWorkdir } from '../server/folders.js';
+import { pickFolder, pickFolderScript, resolveWorkdir } from '../server/folders.js';
 
 test('pickFolderScript uses FolderBrowserDialog with a topmost owner', () => {
   const script = pickFolderScript();
@@ -14,6 +14,14 @@ test('pickFolderScript reads the start folder only from the environment', () => 
   assert.ok(script.includes('$env:AGENT_STORE_PICK_START'));
   assert.ok(!script.includes('${'));
   assert.ok(!script.includes('$args'));
+});
+
+// spawn rejects NUL bytes in env synchronously, so no dialog opens here.
+test('pickFolder releases the lock when spawn throws', { skip: process.platform !== 'win32' }, async () => {
+  const bad = 'C:' + String.fromCharCode(0) + 'x';
+  for (let i = 0; i < 2; i++) {
+    await assert.rejects(pickFolder(bad), (err) => err.status === 400);
+  }
 });
 
 const fallback = 'F';
