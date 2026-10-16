@@ -341,7 +341,8 @@ async function openProjects(projectId) {
               <button class="btn btn-sm" id="prj-edit">✏️</button>
               <button class="btn btn-sm btn-danger" id="prj-del">🗑</button>
             </div>
-          </div>` : `<div class="prj-head"><h3>${sel === 'none' ? '📄 Ergebnisse ohne Projekt' : '🗄️ Alle Ergebnisse'}</h3></div>`}
+          </div>
+          ${current.repo ? '<div class="git-box" id="git-box"><div class="empty-note">Git lädt…</div></div>' : ''}` : `<div class="prj-head"><h3>${sel === 'none' ? '📄 Ergebnisse ohne Projekt' : '🗄️ Alle Ergebnisse'}</h3></div>`}
         <div class="arch-tools">
           <input id="arch-q" placeholder="🔎 Volltextsuche in Aufträgen und Ergebnissen…" value="${esc(archiveView.q)}">
           <select id="arch-agent"><option value="">Alle Agents</option>${agentsSorted().map((a) => `<option value="${esc(a.id)}" ${a.id === archiveView.agentId ? 'selected' : ''}>${esc(a.avatar)} ${esc(a.name)}</option>`).join('')}</select>
@@ -359,6 +360,7 @@ async function openProjects(projectId) {
     $('#prj-desc')?.addEventListener('click', (e) => e.currentTarget.classList.toggle('open'));
     $('#prj-folder').onclick = () => C.api('POST', `/api/projects/${current.id}/open-folder`).catch((e) => C.toast(e.message, 'error'));
     $('#prj-edit').onclick = () => openProjectForm(current);
+    if (current.repo) loadGit(current);
     $('#prj-del').onclick = async () => {
       if (!confirm(`Projekt „${current.name}“ löschen? Ergebnisse bleiben im Archiv, der Ordner bleibt auf der Festplatte.`)) return;
       try { await C.api('DELETE', `/api/projects/${current.id}`); openProjects('all'); } catch (e) { C.toast(e.message, 'error'); }
@@ -368,6 +370,77 @@ async function openProjects(projectId) {
   $('#arch-q').oninput = (e) => { archiveView.q = e.target.value; clearTimeout(timer); timer = setTimeout(loadArchive, 250); };
   $('#arch-agent').onchange = (e) => { archiveView.agentId = e.target.value; loadArchive(); };
   loadArchive();
+}
+
+// Git-Box im Projekt: Stand der Codebase, Commit aller Änderungen und Push des aktuellen Branches.
+async function loadGit(project) {
+  const esc = C.esc;
+  const box = $('#git-box');
+  if (!box) return;
+  let s;
+  try {
+    s = await C.api('GET', `/api/projects/${project.id}/git`);
+  } catch (e) {
+    box.innerHTML = `<div class="git-err">🔀 ${esc(e.message)}</div>`;
+    return;
+  }
+  if (!$('#git-box')) return; // Modal inzwischen gewechselt
+  if (!s.isRepo) {
+    box.innerHTML = '<div class="empty-note">🔀 Der Codebase-Ordner ist kein Git-Repo.</div>';
+    return;
+  }
+  const sync = s.upstream
+    ? `${s.ahead ? `↑${s.ahead} ` : ''}${s.behind ? `↓${s.behind} ` : ''}${!s.ahead && !s.behind ? '✓ synchron' : ''}`
+    : 'noch nicht gepusht';
+  const files = s.files.map((f) => `<li><code>${esc(f.code)}</code> ${esc(f.path)}</li>`).join('');
+  box.innerHTML = `
+    <div class="git-row">
+      <strong>🔀 ${esc(s.branch || 'detached HEAD')}</strong>
+      ${s.protected ? '<span class="chip" title="Geschützter Branch: Push nur mit Bestätigung">🔒 geschützt</span>' : ''}
+      <span class="git-dim">${esc(sync)}</span>
+      <span class="git-dim">${s.files.length} Änderung${s.files.length === 1 ? '' : 'en'}</span>
+      <button class="btn btn-sm btn-ghost" id="git-reload" title="Neu laden">🔄</button>
+    </div>
+    ${s.files.length ? `<details class="git-files"><summary>Geänderte Dateien</summary><ul>${files}</ul></details>
+    <div class="git-row">
+      <input id="git-msg" placeholder="Commit-Nachricht, z. B. feat: add health endpoint" maxlength="2000">
+      <button class="btn btn-sm" id="git-commit">✅ Alles committen</button>
+    </div>` : ''}
+    <div class="git-row">
+      <button class="btn btn-sm btn-gold" id="git-push" ${!s.branch || !s.remote ? 'disabled' : ''}>🚀 ${esc(s.branch || '')} pushen</button>
+      <span class="git-dim">${s.remote ? esc(s.remote) : 'kein Remote „origin“'}</span>
+    </div>
+    ${s.commits.length ? `<div class="git-dim git-log">${s.commits.map((c) => `<div><code>${esc(c.hash)}</code> ${esc(c.subject)}</div>`).join('')}</div>` : ''}
+    <div id="git-out"></div>`;
+  $('#git-reload').onclick = () => loadGit(project);
+  $('#git-commit')?.addEventListener('click', async (e) => {
+    const message = $('#git-msg').value.trim();
+    if (!message) return C.toast('Bitte eine Commit-Nachricht eingeben.', 'error');
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    try {
+      await C.api('POST', `/api/projects/${project.id}/git/commit`, { message });
+      loadGit(project);
+    } catch (err) {
+      C.toast(err.message, 'error'); // Nachricht bleibt stehen
+      btn.disabled = false;
+    }
+  });
+  $('#git-push').onclick = async (e) => {
+    if (s.files.length && !confirm(`${s.files.length} Änderung(en) sind noch nicht committet und werden nicht mitgepusht. Trotzdem pushen?`)) return;
+    if (s.protected && !confirm(`„${s.branch}“ ist ein geschützter Branch. Wirklich direkt nach origin/${s.branch} pushen?`)) return;
+    e.currentTarget.disabled = true;
+    e.currentTarget.textContent = '⏳ pusht…';
+    try {
+      const r = await C.api('POST', `/api/projects/${project.id}/git/push`, { confirmProtected: s.protected });
+      await loadGit(project);
+      const out = $('#git-out');
+      if (out) out.innerHTML = r.prLink ? `<a class="btn btn-sm" href="${esc(r.prLink)}" target="_blank" rel="noopener">🔗 Pull Request öffnen</a>` : '';
+    } catch (err) {
+      C.toast(err.message, 'error');
+      loadGit(project);
+    }
+  };
 }
 
 async function loadArchive() {

@@ -290,7 +290,7 @@ Du schließt eine freigegebene Änderung ab: Doku im Repo aktualisieren und eine
 ## Doku-Änderungen (Datei + was, Commit-Hash)
 ## PR-Titel (Conventional-Commit-Stil, ≤ 70 Zeichen)
 ## PR-Beschreibung (Markdown, Englisch: Summary, Changes, How to test, Notes)
-## Nächste Schritte (z. B. git push -u origin <branch>, PR öffnen, nächste Etappe an Vega)
+## Nächste Schritte (z. B. im Agent Store unter 📁 Projekte → 🔀 Git den Branch pushen und den PR-Link öffnen, nächste Etappe an Vega)
 
 ## Übergabe
 - Kernaussage (max. 3 Sätze)
@@ -430,12 +430,17 @@ Schichten gibt es nur pro Wochentag (kein „1. Montag im Monat“). Sie laufen 
 
 | Fall | Du schreibst an | Kette | Deine Entscheidung |
 |---|---|---|---|
-| Neues Feature | Vega: „Feature: … Kontext: … Muss: … Nicht: …“ | Vega → Otto (↺ Vega) → ⏸️ → Dex → Nova (↺ Dex) → Echo | Plan freigeben, am Ende pushen + PR |
-| Bug | Sola: „Bug: erwartet … tatsächlich … Fehlermeldung …“ | Sola → ⏸️ → Dex → Nova (↺ Dex) → Echo | Diagnose freigeben, am Ende pushen + PR |
+| Neues Feature | Vega: „Feature: … Kontext: … Muss: … Nicht: …“ | Vega → Otto (↺ Vega) → ⏸️ → Dex → Nova (↺ Dex) → Echo | Plan freigeben, am Ende 🚀 pushen + PR |
+| Bug | Sola: „Bug: erwartet … tatsächlich … Fehlermeldung …“ | Sola → ⏸️ → Dex → Nova (↺ Dex) → Echo | Diagnose freigeben, am Ende 🚀 pushen + PR |
 | Kleine Änderung | Dex direkt: „Ändere … in Datei …“ | Dex → Nova (↺ Dex) | Note < 8 nach 3 Runden → Postfach |
 | Security | Schicht Fr 16:00 | Hera → ⏸️ → Vega → Otto → ⏸️ → Dex → Nova → Echo | Funde auswählen, Plan freigeben |
 | Recherche | Max direkt | – | – |
 | Nächste Etappe | Vega: „Etappe 2 aus deiner letzten Spezifikation“ | wie Feature | – |
+
+**Commit & Push:** Die Agents committen nur lokal auf ihrem `agent/`-Branch. Gepusht wird vom Agent Store auf deinen Klick:
+📁 Projekte → Projekt → 🔀 Git-Box → **🚀 <branch> pushen** (nie force, `main` nur nach Rückfrage). Liegen noch
+unkommittete Änderungen herum (z. B. Doku, die Echo nicht committen durfte), committest du sie dort mit **✅ Alles committen**;
+Dateien mit Secrets werden dabei blockiert. Nach dem ersten Push erscheint der Link **🔗 Pull Request öffnen**.
 
 ## O. Start
 

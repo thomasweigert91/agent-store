@@ -143,6 +143,11 @@ nachgeholt. **▶** startet eine Schicht sofort. Das Pixel-Büro wird abends (20
 - Optional hat ein Projekt einen **Codebase-Ordner** (Repo, per 📁 „Wählen…“ im Projekt-Dialog). Alle Aufträge des Projekts
   laufen dann in diesem Ordner. Existiert er nicht mehr, schlägt der Auftrag fehl (kein Rückfall auf den Agent-Ordner).
   Wechselt der Ordner, startet eine Claude-Session neu.
+- **🔀 Git im Projekt:** Ist ein Codebase-Ordner eingetragen, zeigt das Projekt Branch, Sync-Stand, geänderte Dateien und
+  die letzten Commits. **✅ Alles committen** committet alle Änderungen, **🚀 pushen** schiebt den aktuellen Branch nach
+  `origin` (mit `-u`, nie force) und bietet danach den Link zum Pull Request an. Schutz: `main`/`master` nur nach
+  Rückfrage, Commits mit `.env`, `data/settings.json`, Schlüsseldateien oder API-Keys im Inhalt werden blockiert.
+  Die Agents committen selbst nur lokal – gepusht wird auf deinen Klick.
 - **Jedes Ergebnis** landet im Archiv (`data/archive.json`) und bei Projekten zusätzlich als Markdown-Datei in
   `<Projektordner>/ergebnisse/` – nichts verschwindet mehr im Chatverlauf.
 - **📁 Projekte** zeigt alle Projekte mit Volltextsuche, Agent-Filter, **⬇ Markdown-Export** und **🖨 PDF**
@@ -213,6 +218,7 @@ agent-store/
 │  ├─ archive.js            Ergebnis-Archiv (data/archive.json), Suche
 │  ├─ projects.js           Projekte, Projektordner, Markdown-Export
 │  ├─ folders.js            Windows-Ordnerdialog (`/api/pick-folder`), Auflösung des Arbeitsordners
+│  ├─ git.js                Git in der Codebase: Status, Commit, Push (Secret-Sperre, Schutz für main)
 │  ├─ templates.js          Quest-Board-Vorlagen mit {{Platzhaltern}}
 │  ├─ scheduler.js          Schichtplan (Prüfung alle 20 s)
 │  ├─ progress.js           Upgrades, Erfolge, Talente, Statistik
@@ -268,6 +274,7 @@ API-Keys liegen nur lokal in `data/settings.json` bzw. `.env`.
 | POST | `/api/agents/:id/handoff` | Antwort weitergeben `{toAgentId, messageId?, instruction?}` |
 | POST | `/api/agents/:id/relay-decision` | Freigabe-Gate `{approve}` |
 | GET/POST/PATCH/DELETE | `/api/projects[/:id]` | Projekte; `PUT /api/active-project`, `GET /api/projects/:id/export` |
+| GET/POST | `/api/projects/:id/git` · `/git/commit` · `/git/push` | Git-Stand der Codebase; Commit `{message}`; Push `{confirmProtected?}` → `{branch, prLink}` (409 bei main ohne Bestätigung) |
 | GET | `/api/archive?projectId&q&agentId` | Archiv durchsuchen |
 | GET/POST/DELETE | `/api/templates[/:id]` | Vorlagen; `POST /api/templates/:id/run {agentId, values, projectId}` |
 | GET/POST/PATCH/DELETE | `/api/schedules[/:id]` | Schichten; `POST /api/schedules/:id/run-now` |
