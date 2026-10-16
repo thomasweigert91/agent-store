@@ -78,3 +78,23 @@ export function resolveWorkdir({ repo, workdir, fallback, exists }) {
   if (workdir && exists(workdir)) return { cwd: workdir };
   return { cwd: fallback };
 }
+
+// Ordner, in denen Agents mit Schreibrechten großen Schaden anrichten können: Laufwerkswurzel,
+// System- und Programmordner, das ganze Benutzerprofil. Liefert den Grund oder null.
+export function riskyFolder(dir, { home = '', systemDirs = [] } = {}) {
+  const norm = (p) => String(p || '').replace(/[\\/]+/g, '/').replace(/\/$/, '').toLowerCase();
+  const d = norm(dir);
+  if (!d || /^[a-z]:$/.test(d)) return 'Laufwerkswurzel';
+  if (home && d === norm(home)) return 'gesamtes Benutzerprofil';
+  for (const s of systemDirs.map(norm).filter(Boolean)) {
+    if (d === s || d.startsWith(s + '/')) return 'System- oder Programmordner';
+  }
+  return null;
+}
+
+// Zuletzt benutzte Ordner: neuester zuerst, ohne Dubletten (Groß-/Kleinschreibung egal), höchstens `max`.
+export function addRecent(list, dir, max = 8) {
+  const old = Array.isArray(list) ? list : [];
+  if (!dir) return old;
+  return [dir, ...old.filter((r) => r.toLowerCase() !== dir.toLowerCase())].slice(0, max);
+}

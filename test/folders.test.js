@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { pickFolder, pickFolderScript, resolveWorkdir } from '../server/folders.js';
+import { pickFolder, pickFolderScript, resolveWorkdir, riskyFolder, addRecent } from '../server/folders.js';
 
 test('pickFolderScript uses FolderBrowserDialog with a topmost owner', () => {
   const script = pickFolderScript();
@@ -47,4 +47,28 @@ test('resolveWorkdir falls back when the workdir is missing', () => {
 
 test('resolveWorkdir falls back without repo and workdir', () => {
   assert.deepEqual(resolveWorkdir({ repo: '', workdir: '', fallback, exists: () => true }), { cwd: 'F' });
+});
+
+const env = { home: 'C:\\Users\\me', systemDirs: ['C:\\Windows', 'C:\\Program Files'] };
+
+test('riskyFolder flags drive roots, the profile and system folders', () => {
+  assert.equal(riskyFolder('D:\\', env), 'Laufwerkswurzel');
+  assert.equal(riskyFolder('d:', env), 'Laufwerkswurzel');
+  assert.equal(riskyFolder('/', env), 'Laufwerkswurzel');
+  assert.equal(riskyFolder('C:\\Users\\me\\', env), 'gesamtes Benutzerprofil');
+  assert.equal(riskyFolder('c:/windows/system32', env), 'System- oder Programmordner');
+  assert.equal(riskyFolder('C:\\Program Files\\App', env), 'System- oder Programmordner');
+});
+
+test('riskyFolder accepts normal project folders', () => {
+  assert.equal(riskyFolder('D:\\agent-store', env), null);
+  assert.equal(riskyFolder('C:\\Users\\me\\code\\tool', env), null);
+  assert.equal(riskyFolder('C:\\Program Files Extra', env), null);
+});
+
+test('addRecent puts the newest first without duplicates', () => {
+  assert.deepEqual(addRecent(['A', 'B'], 'b'), ['b', 'A']);
+  assert.deepEqual(addRecent(['A'], ''), ['A']);
+  assert.deepEqual(addRecent(undefined, 'X'), ['X']);
+  assert.deepEqual(addRecent(['1', '2', '3'], '4', 3), ['4', '1', '2']);
 });

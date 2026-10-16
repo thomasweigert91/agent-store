@@ -140,9 +140,13 @@ nachgeholt. **▶** startet eine Schicht sofort. Das Pixel-Büro wird abends (20
   Massenauftrag, Schichten) werden ihm zugeordnet. Übergaben behalten das Projekt bei.
 - Jedes Projekt hat einen **gemeinsamen Projektordner** (automatisch unter `workspaces/projekte/` oder ein eigener
   Pfad). Claude- und Gemini-Abo-Agents bekommen per `--add-dir` Zugriff darauf und den Projektkontext mitgeschickt.
-- Optional hat ein Projekt einen **Codebase-Ordner** (Repo, per 📁 „Wählen…“ im Projekt-Dialog). Alle Aufträge des Projekts
-  laufen dann in diesem Ordner. Existiert er nicht mehr, schlägt der Auftrag fehl (kein Rückfall auf den Agent-Ordner).
-  Wechselt der Ordner, startet eine Claude-Session neu.
+- Optional hat ein Projekt einen **Codebase-Ordner** (Repo). Gewechselt wird er mit dem **💻-Schalter** oben neben der
+  Projektauswahl: zuletzt benutzte Ordner, „📁 Anderer Ordner…“ oder „Ohne Codebase“. Neue Aufträge aller Agents des
+  Projekts laufen dann in diesem Ordner – so arbeitet ein Team (eine Kette) nacheinander in beliebig vielen Repos.
+  **Laufende Ketten behalten ihren Ordner** (er wird beim Auftrag festgehalten und mit jeder Übergabe weitergegeben),
+  Ergebnisdateien tragen die Zeile `Codebase: …`. Laufwerkswurzeln, System-/Programmordner und das ganze
+  Benutzerprofil gehen nur nach Rückfrage. Existiert der Ordner nicht mehr, schlägt der Auftrag fehl (kein Rückfall
+  auf den Agent-Ordner). Wechselt der Ordner, startet eine Claude-Session neu.
 - **🔀 Git im Projekt:** Ist ein Codebase-Ordner eingetragen, zeigt das Projekt Branch, Sync-Stand, geänderte Dateien und
   die letzten Commits. **✅ Alles committen** committet alle Änderungen, **🚀 pushen** schiebt den aktuellen Branch nach
   `origin` (mit `-u`, nie force) und bietet danach den Link zum Pull Request an. Schutz: `main`/`master` nur nach
@@ -274,6 +278,7 @@ API-Keys liegen nur lokal in `data/settings.json` bzw. `.env`.
 | POST | `/api/agents/:id/handoff` | Antwort weitergeben `{toAgentId, messageId?, instruction?}` |
 | POST | `/api/agents/:id/relay-decision` | Freigabe-Gate `{approve}` |
 | GET/POST/PATCH/DELETE | `/api/projects[/:id]` | Projekte; `PUT /api/active-project`, `GET /api/projects/:id/export` |
+| PUT/POST | `/api/projects/:id/repo` · `/repo/forget` | Codebase-Ordner wechseln `{repo, confirmRisky?}` (409 `code: risky` bei riskanten Ordnern) · aus der Liste entfernen `{repo}` |
 | GET/POST | `/api/projects/:id/git` · `/git/commit` · `/git/push` | Git-Stand der Codebase; Commit `{message}`; Push `{confirmProtected?}` → `{branch, prLink}` (409 bei main ohne Bestätigung) |
 | GET | `/api/archive?projectId&q&agentId` | Archiv durchsuchen |
 | GET/POST/DELETE | `/api/templates[/:id]` | Vorlagen; `POST /api/templates/:id/run {agentId, values, projectId}` |

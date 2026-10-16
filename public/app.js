@@ -45,7 +45,7 @@ async function api(method, url, body) {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || res.statusText);
+  if (!res.ok) throw Object.assign(new Error(data.error || res.statusText), { status: res.status, code: data.code });
   return data;
 }
 
@@ -163,7 +163,71 @@ function renderProjectPicker() {
   const p = S.projects.find((x) => x.id === S.game.activeProjectId);
   sel.parentElement.classList.toggle('active', Boolean(p));
   sel.parentElement.style.setProperty('--pc', p?.color || 'var(--line2)');
+  renderFolderPicker(p);
 }
+
+// Ordner-Schalter: Codebase-Ordner des aktiven Projekts – gilt für neue Aufträge aller Agents im Projekt.
+const folderBase = (dir) => String(dir).replace(/[\\/]+$/, '').split(/[\\/]/).pop() || dir;
+
+function renderFolderPicker(p) {
+  const box = $('#folder-picker');
+  if (!box) return;
+  box.hidden = !p;
+  if (!p) return;
+  const name = $('#folder-name');
+  name.textContent = p.repo ? folderBase(p.repo) : 'kein Ordner';
+  $('#folder-btn').title = p.repo
+    ? `Codebase von „${p.name}“: ${p.repo}\nAlle Agents des Projekts arbeiten hier. Klick zum Wechseln.`
+    : `„${p.name}“ hat keinen Codebase-Ordner – jeder Agent arbeitet in seinem eigenen Ordner. Klick zum Wählen.`;
+  box.classList.toggle('set', Boolean(p.repo));
+  const recent = (p.recentRepos || []).filter(Boolean);
+  const cur = (p.repo || '').toLowerCase();
+  $('#folder-menu').innerHTML = `
+    <div class="folder-menu-head">Codebase für <b>${esc(p.icon)} ${esc(p.name)}</b><small>Gilt für neue Aufträge aller Agents im Projekt. Laufende Ketten bleiben in ihrem Ordner.</small></div>
+    ${recent.map((r) => `
+      <div class="folder-item ${r.toLowerCase() === cur ? 'on' : ''}">
+        <button data-repo="${esc(r)}" title="${esc(r)}"><span class="folder-check">${r.toLowerCase() === cur ? '✓' : ''}</span><b>${esc(folderBase(r))}</b><small>${esc(r)}</small></button>
+        <button class="folder-forget" data-forget="${esc(r)}" title="Aus der Liste entfernen">✕</button>
+      </div>`).join('') || '<div class="folder-empty">Noch keine Ordner benutzt.</div>'}
+    <div class="folder-sep"></div>
+    <button class="folder-action" id="folder-pick">📁 Anderer Ordner…</button>
+    ${p.repo ? '<button class="folder-action" data-repo="">🚫 Ohne Codebase (jeder Agent in seinem Ordner)</button>' : ''}`;
+}
+
+async function setProjectRepo(p, repo, confirmRisky = false) {
+  try {
+    await api('PUT', `/api/projects/${p.id}/repo`, { repo, confirmRisky });
+  } catch (err) {
+    if (err.code === 'risky' && !confirmRisky && confirm(`${err.message}\n\nTrotzdem diesen Ordner verwenden?`)) return setProjectRepo(p, repo, true);
+    if (err.code !== 'risky') toast(err.message, 'error');
+  }
+}
+
+function toggleFolderMenu(open) {
+  const menu = $('#folder-menu');
+  const show = open ?? menu.hidden;
+  menu.hidden = !show;
+  $('#folder-btn').setAttribute('aria-expanded', String(show));
+}
+
+$('#folder-btn').onclick = (e) => { e.stopPropagation(); toggleFolderMenu(); };
+$('#folder-menu').onclick = async (e) => {
+  e.stopPropagation();
+  const p = S.projects.find((x) => x.id === S.game.activeProjectId);
+  if (!p) return;
+  const forget = e.target.closest('[data-forget]');
+  if (forget) { api('POST', `/api/projects/${p.id}/repo/forget`, { repo: forget.dataset.forget }).catch((err) => toast(err.message, 'error')); return; }
+  const pick = e.target.closest('#folder-pick');
+  const item = e.target.closest('[data-repo]');
+  if (!pick && !item) return;
+  toggleFolderMenu(false);
+  if (item) return setProjectRepo(p, item.dataset.repo);
+  try {
+    const { path } = await api('POST', '/api/pick-folder', { start: p.repo || '' });
+    if (path) await setProjectRepo(p, path);
+  } catch (err) { toast(err.message, 'error'); }
+};
+document.addEventListener('click', () => { if (!$('#folder-menu').hidden) toggleFolderMenu(false); });
 
 function projectChip(id) {
   const p = S.projects.find((x) => x.id === id);

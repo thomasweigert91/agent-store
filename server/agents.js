@@ -106,9 +106,9 @@ export function agentCwd(agent) {
 }
 
 // Ordner eines Auftrags: Codebase des Projekts hat Vorrang. Nur der eigene Ordner wird angelegt.
-function taskCwd(agent, project) {
+function taskCwd(agent, repo) {
   const fallback = workspaceFor(agent);
-  const { cwd, error } = resolveWorkdir({ repo: project?.repo, workdir: agent.workdir, fallback, exists: fs.existsSync });
+  const { cwd, error } = resolveWorkdir({ repo, workdir: agent.workdir, fallback, exists: fs.existsSync });
   if (error) throw new Error(error);
   if (cwd === fallback) fs.mkdirSync(cwd, { recursive: true });
   return cwd;
@@ -365,6 +365,7 @@ export function enqueue(id, prompt, opts = {}) {
     prompt: text,
     ts: Date.now(),
     projectId: project ? projectId : null,
+    repo: project?.repo || '', // Ordner wird beim Auftrag festgehalten; ein späterer Wechsel betrifft nur neue Aufträge
     profileId: resolveProfileId(opts.profileId, project),
     source: opts.source || 'manual',
     ...(opts.planItemId ? { planItemId: opts.planItemId } : {}),
@@ -384,7 +385,7 @@ export function enqueue(id, prompt, opts = {}) {
  * chainId/step werden bei Ketten mitgeführt, round/returnTo bei Prüfer-Runden.
  * Mit `text` kann statt einer Nachricht ein beliebiger Text übergeben werden.
  */
-export function handoff(fromId, { toAgentId, messageId, text, instruction, chainId, step = 1, round, returnTo, projectId, profileId } = {}) {
+export function handoff(fromId, { toAgentId, messageId, text, instruction, chainId, step = 1, round, returnTo, projectId, profileId, repo } = {}) {
   const from = findAgent(fromId);
   if (!from) throw fail(404, 'Agent nicht gefunden.');
   const to = findAgent(toAgentId);
@@ -399,6 +400,9 @@ export function handoff(fromId, { toAgentId, messageId, text, instruction, chain
   const header = `${instr}\n\nErgebnis von ${from.name} (${from.archetypeTitle}):\n\n`;
   const prompt = header + content.slice(0, 100000 - header.length);
   const pid = projectId !== undefined ? projectId : msg?.meta?.projectId ?? null;
+  const project = findProject(pid);
+  // Kette bleibt im Ordner ihres Starts; Handübergaben nehmen den Ordner der Antwort, sonst den aktuellen.
+  const taskRepo = project ? (repo ?? msg?.meta?.repo ?? project.repo ?? '') : '';
   to.queue.push({
     id: uid(),
     prompt,
@@ -408,7 +412,8 @@ export function handoff(fromId, { toAgentId, messageId, text, instruction, chain
     resultStart: header.length,
     chainId: chainId || uid(),
     step,
-    projectId: findProject(pid) ? pid : null,
+    projectId: project ? pid : null,
+    repo: taskRepo,
     profileId: (() => { const p = profileId !== undefined ? profileId : msg?.meta?.profileId ?? null; return findProfile(p) ? p : null; })(),
     source: 'handoff',
     ...(round ? { round } : {}),
@@ -525,6 +530,8 @@ async function execute(agent) {
 
   const history = agent.messages.slice();
   const project = findProject(task.projectId);
+  // Festgehaltener Ordner des Auftrags; ältere Aufträge ohne Feld nehmen den aktuellen des Projekts.
+  const repo = project ? (task.repo ?? project.repo ?? '') : '';
   const profile = findProfile(task.profileId);
   const reviewMode = Boolean(agent.review?.enabled && task.from);
   addMessage(agent, {
@@ -564,7 +571,7 @@ async function execute(agent) {
 
   try {
     if (!provider) throw new Error('Unbekannter Provider: ' + agent.provider);
-    const cwd = taskCwd(agent, project);
+    const cwd = taskCwd(agent, repo);
     // Claude-Sessions hängen am Ordner: anderer Ordner als beim letzten Lauf = neue Session.
     const prevCwd = agent.sessionCwd ?? agentCwd(agent);
     if (agent.sessionId && prevCwd !== cwd) agent.sessionId = null;
@@ -574,7 +581,7 @@ async function execute(agent) {
     const writeHint = canWrite || reviewMode ? '' : fileBlockHint(project ? `Projektordner „${project.name}“` : 'Arbeitsordner');
     const result = await provider.run({
       agent,
-      prompt: (project ? projectPreamble(project) : '') + (profile ? profilePreamble(profile) : '') + task.prompt + (reviewMode ? REVIEW_SUFFIX : '') + writeHint,
+      prompt: (project ? projectPreamble(project, repo) : '') + (profile ? profilePreamble(profile) : '') + task.prompt + (reviewMode ? REVIEW_SUFFIX : '') + writeHint,
       persona: personaWithTalents(agent) + (!agent.projectId && project && agent.projectPrompts?.[project.id]
         ? `\n\nZusätzlich im Projekt „${project.name}“:\n${agent.projectPrompts[project.id]}` : ''),
       history,
@@ -594,7 +601,7 @@ async function execute(agent) {
       text,
       meta: {
         provider: agent.provider, model: agent.model, durationMs, costUsd: result.costUsd, tools: l.tools,
-        coins: r.coins, xp: r.xp, projectId: project?.id || null, chainId: task.chainId || null,
+        coins: r.coins, xp: r.xp, projectId: project?.id || null, repo, chainId: task.chainId || null,
         profileId: profile?.id || null, structure: task.structure || null, planItemId: task.planItemId || null,
         ...(reviewMode ? { score, minScore: agent.review.minScore, round: task.round || 1 } : {}),
       },
@@ -659,6 +666,7 @@ function archiveResult(agent, task, msg, project, durationMs, costUsd, score) {
     agentAvatar: agent.avatar,
     archetypeTitle: agent.archetypeTitle,
     projectId: project?.id || null,
+    repo: msg.meta?.repo || '',
     prompt: (task.from ? `${task.instruction} (Übergabe von ${task.from.name})` : task.prompt).slice(0, 4000),
     text: msg.text,
     provider: agent.provider,
@@ -703,6 +711,7 @@ function relayResult(agent, task, msg, override = {}) {
     step,
     projectId: task.projectId ?? null,
     profileId: task.profileId ?? null,
+    repo: task.repo,
     messageId: msg.id,
     ...(override.text ? { text: override.text } : {}),
   };
@@ -758,6 +767,7 @@ function handleReview(agent, task, msg, score) {
     returnTo: agent.id,
     projectId: task.projectId ?? null,
     profileId: task.profileId ?? null,
+    repo: task.repo,
   });
 }
 
@@ -774,6 +784,7 @@ function returnRevision(agent, task, msg) {
     round: task.round,
     projectId: task.projectId ?? null,
     profileId: task.profileId ?? null,
+    repo: task.repo,
   });
   return true;
 }

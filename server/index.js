@@ -172,6 +172,19 @@ route('POST', '/api/projects/:id/open-folder', ({ id }) => {
   openFolder(projects.projectFolder(p));
   return { ok: true };
 });
+// Codebase-Ordner wechseln (gilt für neue Aufträge aller Agents im Projekt) bzw. aus der Liste entfernen.
+route('PUT', '/api/projects/:id/repo', ({ id }, body) => {
+  const p = projects.setRepo(id, body.repo, { confirmRisky: body.confirmRisky === true });
+  emitProjects();
+  emit('toast', { kind: 'info', text: p.repo ? `💻 ${p.name}: Agents arbeiten ab jetzt in ${p.repo}` : `💻 ${p.name}: ohne Codebase-Ordner` });
+  return projects.publicProject(p);
+});
+route('POST', '/api/projects/:id/repo/forget', ({ id }, body) => {
+  const p = projects.forgetRepo(id, body.repo);
+  emitProjects();
+  return projects.publicProject(p);
+});
+
 // Git in der Codebase des Projekts (Status, Commit, Push – nie force).
 function projectRepo(id) {
   const p = projects.findProject(id);
@@ -461,7 +474,7 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, result ?? { ok: true });
     } catch (err) {
       if (!err.status) console.error(err);
-      return sendJson(res, err.status || 500, { error: err.message || 'Serverfehler' });
+      return sendJson(res, err.status || 500, { error: err.message || 'Serverfehler', ...(err.code && err.status ? { code: err.code } : {}) });
     }
   }
 
